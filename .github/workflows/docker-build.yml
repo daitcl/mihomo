@@ -13,7 +13,8 @@ on:
   workflow_dispatch:            # 允许手动触发
 
 env:
-  IMAGE_NAME: metacubexd        # 镜像名称
+
+  IMAGE_NAME: Mihomo        # 镜像名称
   REGISTRY: ghcr.io             # GitHub 容器注册表地址
 
 jobs:
