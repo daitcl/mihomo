@@ -14,7 +14,7 @@ on:
 
 env:
 
-  IMAGE_NAME: Mihomo        # 镜像名称
+  IMAGE_NAME: mihomo        # 镜像名称
   REGISTRY: ghcr.io             # GitHub 容器注册表地址
 
 jobs:
@@ -30,13 +30,11 @@ jobs:
       # 步骤 2：加载 .env 变量
       - name: Load environment variables
         run: |
-          if [ -f .env ]; then
-            while IFS= read -r line; do
-              if [[ $line != \#* && $line == *"="* ]]; then
-                echo "$line" >> $GITHUB_ENV
-              fi
-            done < .env
-          fi
+          # 兼容Windows换行符
+          sed -i 's/\r$//' .env
+          # 直接加载变量
+          export $(grep -v '^#' .env | xargs)
+          echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
 
       # 步骤 3：验证版本号
       - name: Validate MI_VERSION
