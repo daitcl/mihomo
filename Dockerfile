@@ -1,14 +1,13 @@
-ARG MI_VERSION="v1.19.11"
-
+FROM docker.io/node:alpine AS ui-builder 
 # 阶段1：构建 Metacubexd 前端
-FROM docker.io/node:alpine AS ui-builder
+ARG MetaCubeX_VERSION
 
 ENV HUSKY=0
 WORKDIR /build
 
 # 克隆指定版本仓库并安装构建依赖
 RUN apk add --no-cache git gettext \
-    && git clone -b ${MI_VERSION} https://github.com/MetaCubeX/metacubexd.git . \
+    && git clone -b ${MetaCubeX_VERSION} https://github.com/MetaCubeX/metacubexd.git . \
     && corepack enable \
     && corepack prepare pnpm@latest --activate \
     && pnpm install \
@@ -16,6 +15,8 @@ RUN apk add --no-cache git gettext \
 
 # 阶段2：构建最终镜像
 FROM docker.io/caddy:alpine
+
+ARG MI_VERSION
 
 # 安装依赖并配置运行环境
 RUN apk add --no-cache libcap curl gettext

@@ -13,9 +13,9 @@ on:
   workflow_dispatch:            # 允许手动触发
 
 env:
-
-  IMAGE_NAME: mihomo        # 镜像名称
-  REGISTRY: ghcr.io             # GitHub 容器注册表地址
+  IMAGE_NAME: mihomo
+  REGISTRY: ghcr.io
+  MetaCubeX_VERSION: '' # metacubexd版本号
 
 jobs:
   build-and-push:
@@ -35,6 +35,7 @@ jobs:
           # 直接加载变量
           export $(grep -v '^#' .env | xargs)
           echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
+          echo "MetaCubeX_VERSION=$MetaCubeX_VERSION" >> $GITHUB_ENV
 
       # 步骤 3：验证版本号
       - name: Validate MI_VERSION
@@ -72,11 +73,26 @@ jobs:
             ghcr.io/daitcl/mihomo:latest
           build-args: |
             MI_VERSION=${{ env.MI_VERSION }}
+            MetaCubeX_VERSION=${{ env.MetaCubeX_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      # 步骤 6：生成镜像链接
+      # 步骤 6：生成版本说明
+      - name: Generate release notes
+        run: |
+          sed -e "s/{{MI_VERSION}}/$MI_VERSION/g" \
+              -e "s/{{MetaCubeX_VERSION}}/$MetaCubeX_VERSION/g" \
+              release_notes.md.template > release_notes.md
+
+      # 步骤 7：上传说明文件
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release_notes.md
+
+      # 步骤 8：生成镜像链接
       - name: Show image URL
         run: |
           echo "Docker image pushed to:"

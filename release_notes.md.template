@@ -1,0 +1,20 @@
+# mihomo 镜像版本说明
+
+**构建信息**
+- mihomo 核心版本: `{{MI_VERSION}}`
+- Metacubexd 面板版本: `{{MetaCubeX_VERSION}}`
+
+## 组件更新说明
+✅ 包含最新地理规则数据库
+✅ 使用 Caddy 2.6 作为反向代理
+✅ 预装健康检查脚本
+
+## 版本特性
+- 支持 Linux amd64 架构
+- 内置端口：7890-7894 (SOC5端口组)
+- 管理面板端口：8080
+
+## 使用提示
+```bash
+docker pull ghcr.io/daitcl/mihomo:{{MI_VERSION}}
+```
