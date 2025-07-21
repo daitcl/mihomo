@@ -1,62 +1,66 @@
-# Mihomo 代理服务容器化部署
+### mihomo Docker 镜像完整使用指南
 
-## 项目概述
-基于Mihomo核心的Docker化代理解决方案，提供：
-- 多协议代理服务(HTTP/SOCKS5)
-- 可视化规则管理界面
-- 自动订阅更新机制
-- TUN模式支持（需额外配置）
+#### 📦 镜像组成
 
-## 快速入门
-```bash
-# 创建环境配置文件
-cp .env.example .env
-
-# 启动容器（开发模式）
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
+```mermaid
+graph TD
+    A[mihomo 容器] --> B[Clash 核心]
+    A --> C[Metacubexd Web UI]
+    B --> D[代理服务]
+    B --> E[规则引擎]
+    C --> F[可视化控制]
+    C --> G[流量监控]
 ```
 
-## 环境配置
-在`.env`文件中设置：
-```ini
-# 基础配置
-MI_VERSION=latest
-TZ=Asia/Shanghai
 
-# 安全配置（从安全渠道获取）
-CLASH_SECRET=your_secure_secret
-SUBSCRIBE_URL=your_subscription_endpoint
+
+------
+
+#### 🌐 Metacubexd Web UI 详解
+
+##### 核心配置
+
+```yaml
+ports:
+  - "8080:8080"  # Metacubexd Web UI 端口映射
+volumes:
+  - ./metacubexd-config:/config/caddy  # 配置持久化
 ```
 
-## 多环境部署
-| 配置项       | 开发环境          | 生产环境          |
-|--------------|-------------------|-------------------|
-| 镜像版本     | latest            | v1.x.x            |
-| 日志级别     | debug             | warning           |
-| 健康检查间隔 | 30s               | 60s               |
+##### 关键特性
 
-## 端口说明
-| 端口  | 协议    | 用途               |
-|-------|---------|--------------------|
-| 7890  | HTTP    | 网页代理           |
-| 7891  | SOCKS5  |  socks5代理        |
-| 9090  | HTTP    | 控制API            |
-| 7888  | HTTP    | 规则管理界面       |
+1. **端口关系**：
 
-## 安全实践
-1. 定期轮换CLASH_SECRET
-2. 通过volume持久化配置
-3. 使用网络隔离(clash-net)
-4. 按需启用TUN模式
+   - 容器内部端口：`8080`（Metacubexd 默认端口）
+   - 宿主机映射端口：`8080`（可自定义）
 
-## 文档链接
-- [Mihomo文档](https://github.com/MetaCubeX/mihomo)
-- [Docker最佳实践](https://docs.docker.com/develop/)
+2. **访问方式**：
 
-## 直接使用镜像部署
+   ```http
+   http://<宿主机IP>:7888
+   ```
+
+   示例：`http://localhost:7888` 或 `http://192.168.1.100:7888`
+
+3. **身份验证**：
+
+   - 需设置 `CLASH_SECRET` 环境变量作为登录密码
+   - 未设置时可直接访问（**不推荐**）
+
+4. **功能矩阵**：
+
+   | 功能模块     | 说明                    |
+   | :----------- | :---------------------- |
+   | 代理节点选择 | 实时切换代理节点        |
+   | 流量统计     | 实时/历史流量图表       |
+   | 规则管理     | 查看/调试流量匹配规则   |
+   | 连接监控     | 活动连接列表及状态      |
+   | 配置编辑器   | 在线编辑 Clash 配置文件 |
+   | 订阅管理     | 手动更新订阅            |
+
+------
+
+#### ⚙️ 完整配置文件
 
 ```yaml
 version: '3.8'
@@ -64,23 +68,58 @@ version: '3.8'
 services:
   mihomo:
     container_name: mihomo
-    image: daitcl/mihomo:v1.19.11  # 使用官方镜像
+    image: daitcl/mihomo:latest
     restart: always
     environment:
-      - TZ=Asia/Shanghai  # 时区设置
-      - LOG_LEVEL=silent  # 日志级别: silent/info/debug
-      - CLASH_SECRET=  # Web UI访问密钥
-      - SUBSCRIBE_URL=your_subscribe_url  # 订阅链接
-      - SUBSCRIBE_NAME=your_subscribe_name  # 订阅名称
+      # 时区设置
+      - TZ=Asia/Shanghai
+      
+      # 日志配置（silent/info/debug/warning）
+      - LOG_LEVEL=silent
+      
+      # 安全设置（Web UI访问密码）
+      - CLASH_SECRET=your_password
+      
+      # 订阅配置
+      - SUBSCRIBE_URL=https://your.subscribe/link
+      - SUBSCRIBE_NAME=my_config
+      
     ports:
+      # 代理服务端口
       - "7890:7890"  # HTTP代理
       - "7891:7891"  # SOCKS5代理
       - "7892:7892"  # 混合代理
-      - "9090:9090"  # 控制API
-      - "7888:80"    # Web UI
+      - "7893:7893"  # TPROXY透明代理
+      - "7894:7894"  # REDIR透明代理
+      
+      # 管理端口
+      - "9090:9090"  # Clash RESTful API
+      - "7888:8080"  # Metacubexd Web UI（关键配置）
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
     volumes:
-      - ./clash-config:/root/.config/mihomo  # 配置文件目录
-      - ./metacubexd-config:/config/caddy     # Web UI配置目录
+      # 核心配置持久化
+      - ./clash-config:/root/.config/mihomo
+      
+      # Metacubexd配置持久化
+      - ./metacubexd-config:/config/caddy
+      
+      # 时区同步（可选）
+      # - /etc/timezone:/etc/timezone:ro
+      # - /etc/localtime:/etc/localtime:ro
+    
+    # TUN模式（透明代理）
+    # cap_add:
+    #   - NET_ADMIN
+    # devices:
+    #   - /dev/net/tun:/dev/net/tun
+    
     networks:
       - clash-net
 
@@ -88,3 +127,128 @@ networks:
   clash-net:
     driver: bridge
 ```
+
+------
+
+#### 🔧 Metacubexd 高级配置
+
+##### 自定义配置路径
+
+1. **查看默认配置**：
+
+   ```bash
+   ls ./metacubexd-config
+   # 输出示例：
+   # Caddyfile  sites-enabled/  ssl/
+   ```
+
+2. **修改Caddy配置**（反向代理/HTTPS）：
+   编辑 `./metacubexd-config/Caddyfile`：
+
+   ```nginx
+   {
+       # 启用HTTPS（需提供证书）
+       auto_https disable_redirects
+   }
+   
+   :8080 {
+       # 基本认证（与CLASH_SECRET联动）
+       basicauth /* {
+           clash $2a$14$YOUR_PASSWORD_HASH
+       }
+       
+       # 反向代理设置
+       reverse_proxy http://localhost:9090
+       
+       # 自定义路由
+       handle_path /dashboard/* {
+           root * /usr/share/caddy
+           file_server
+       }
+   }
+   ```
+
+##### 配置更新流程
+
+```mermaid
+sequenceDiagram
+    participant 用户
+    participant Caddy as Metacubexd(Caddy)
+    participant Clash
+    
+    用户->>Caddy: 访问 http://host:7888
+    Caddy->>Clash: 转发API请求到 localhost:9090
+    Clash-->>Caddy: 返回代理数据
+    Caddy-->>用户: 显示Web界面
+```
+
+
+
+------
+
+#### 🚀 部署操作指南
+
+1. **初始化目录**：
+
+   ```bash
+   mkdir -p {clash-config,metacubexd-config}
+   ```
+
+2. **启动服务**：
+
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **访问控制面板**：
+
+   - 浏览器打开：`http://your-server-ip:7888`
+   - 输入 `CLASH_SECRET` 设置的口令
+
+4. **验证服务状态**：
+
+   ```bash
+   docker-compose ps
+   # 应显示 mihomo 状态为 Up (healthy)
+   ```
+
+------
+
+#### ⚠️ 故障排除
+
+##### Metacubexd 访问问题
+
+| 现象            | 解决方案                            |
+| :-------------- | :---------------------------------- |
+| 无法打开页面    | 检查 `8080` 端口防火墙规则          |
+| 持续加载无数据  | 验证 `CLASH_SECRET` 与API连通性     |
+| 403 Forbidden   | 确认 `./metacubexd-config` 目录权限 |
+| 样式/JS加载失败 | 清除浏览器缓存或检查Caddy配置       |
+
+##### 日志检查命令
+
+```bash
+docker-compose logs -f mihomo
+# 关注以下关键词：
+# - "Starting MetaCubeX daemon"
+# - "Caddy serving initial configuration"
+```
+
+------
+
+#### 🔄 维护操作
+
+1. **备份配置**：
+
+   ```bash
+   tar czvf clash-backup-$(date +%s).tar.gz ./clash-config ./metacubexd-config
+   ```
+
+2. **版本升级**：
+
+   ```bash
+   docker-compose pull
+   docker-compose up -d --force-recreate
+   ```
+
+> 项目源码：[mihomo](https://github.com/MetaCubeX/mihomo) | [Metacubexd](https://github.com/MetaCubeX/metacubexd)
