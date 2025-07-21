@@ -68,7 +68,7 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/daitcl/mihomo:${{ inputs.mihomo_version }}
+            ghcr.io/daitcl/mihomo:${{ env.MI_VERSION }}
             ghcr.io/daitcl/mihomo:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
