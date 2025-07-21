@@ -1,0 +1,67 @@
+name: Check Version Updates
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get current versions
+        id: get_versions
+        run: |
+          MI_CURRENT=$(grep -oP 'MI_VERSION=\K[^\s]+' .env)
+          META_CURRENT=$(grep -oP 'MetaCubeX_VERSION=\K[^\s]+' .env)
+          echo "MI_CURRENT=$MI_CURRENT" >> $GITHUB_OUTPUT
+          echo "META_CURRENT=$META_CURRENT" >> $GITHUB_OUTPUT
+
+      - name: Get latest mihomo version
+        id: get_mi_version
+        run: |
+          LATEST_MI=$(curl -sL https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | jq -r '.tag_name')
+          echo "LATEST_MI=$LATEST_MI" >> $GITHUB_OUTPUT
+
+      - name: Get latest metacubexd version
+        id: get_meta_version
+        run: |
+          LATEST_META=$(curl -sL https://api.github.com/repos/MetaCubeX/metacubexd/releases/latest | jq -r '.tag_name')
+          echo "LATEST_META=$LATEST_META" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        id: compare_versions
+        run: |
+          if [[ "${{ steps.get_versions.outputs.MI_CURRENT }}" != "${{ steps.get_mi_version.outputs.LATEST_MI }}" ]]; then
+            echo "MI_UPDATE_NEEDED=true" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "${{ steps.get_versions.outputs.META_CURRENT }}" != "${{ steps.get_meta_version.outputs.LATEST_META }}" ]]; then
+            echo "META_UPDATE_NEEDED=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update .env file
+        if: steps.compare_versions.outputs.MI_UPDATE_NEEDED == 'true' || steps.compare_versions.outputs.META_UPDATE_NEEDED == 'true'
+        run: |
+          if [[ "${{ steps.compare_versions.outputs.MI_UPDATE_NEEDED }}" == 'true' ]]; then
+            sed -i "s/^MI_VERSION=.*/MI_VERSION=${{ steps.get_mi_version.outputs.LATEST_MI }}/" .env
+          fi
+          
+          if [[ "${{ steps.compare_versions.outputs.META_UPDATE_NEEDED }}" == 'true' ]]; then
+            sed -i "s/^MetaCubeX_VERSION=.*/MetaCubeX_VERSION=${{ steps.get_meta_version.outputs.LATEST_META }}/" .env
+          fi
+          
+          echo "Updated .env:"
+          cat .env
+
+      - name: Commit changes
+        if: steps.compare_versions.outputs.MI_UPDATE_NEEDED == 'true' || steps.compare_versions.outputs.META_UPDATE_NEEDED == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .env
+          git commit -m "chore: Auto update versions"
+          git push

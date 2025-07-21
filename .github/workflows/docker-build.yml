@@ -15,7 +15,8 @@ on:
 env:
   IMAGE_NAME: mihomo
   REGISTRY: ghcr.io
-  MetaCubeX_VERSION: '' # metacubexd版本号
+  MetaCubeX_VERSION: ''
+  MI_VERSION: ''
 
 jobs:
   build-and-push:
@@ -62,7 +63,7 @@ jobs:
           driver: docker-container
           install: true
 
-      # 步骤 6：构建并推送镜像  
+      # 步骤 6：构建并推送镜像（合并后）
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -77,20 +78,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          labels: |
+            org.opencontainers.image.description=${{ steps.generate_notes.outputs.notes_content }}
 
-      # 步骤 6：生成版本说明
-      - name: Generate release notes
-        run: |
-          sed -e "s/{{MI_VERSION}}/$MI_VERSION/g" \
-              -e "s/{{MetaCubeX_VERSION}}/$MetaCubeX_VERSION/g" \
-              release_notes.md.template > release_notes.md
-
-      # 步骤 7：上传说明文件
-      - name: Upload release notes
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-notes
-          path: release_notes.md
 
       # 步骤 8：生成镜像链接
       - name: Show image URL
