@@ -70,6 +70,8 @@ jobs:
           tags: |
             ghcr.io/daitcl/mihomo:${{ env.MI_VERSION }}
             ghcr.io/daitcl/mihomo:latest
+          build-args: |
+            MI_VERSION=${{ env.MI_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
