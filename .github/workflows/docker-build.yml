@@ -1,61 +1,76 @@
-name: Docker Image CI
+name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - 'main'
-    tags:
-      - 'v*.*.*'
+    branches: [main]    # 主分支推送时触发
+    paths:                      # 只有这些文件变更才触发
+      - Dockerfile
+      - start.sh
+      - Caddyfile
+      - config.yaml.template
+      - .github/workflows/*.yml
+      - .env
+  workflow_dispatch:            # 允许手动触发
+
+env:
+  IMAGE_NAME: metacubexd        # 镜像名称
+  REGISTRY: ghcr.io             # GitHub 容器注册表地址
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
-      - name: Checkout
+      # 步骤 1：检出代码
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: 解析环境变量
-        id: parse-env
-        run: |
-          MI_VERSION=$(grep '^MI_VERSION=' .env | cut -d'=' -f2)
-          echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
+          fetch-depth: 0        # 获取完整提交历史
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      # 步骤 2：加载 .env 变量
+      - name: Load environment variables
+        run: |
+          if [ -f .env ]; then
+            while IFS= read -r line; do
+              if [[ $line != \#* && $line == *"="* ]]; then
+                echo "$line" >> $GITHUB_ENV
+              fi
+            done < .env
+          fi
 
-      - name: Login to GHCR
+      # 步骤 3：验证版本号
+      - name: Validate MI_VERSION
+        run: |
+          if [ -z "$MI_VERSION" ]; then
+            echo "::error::MI_VERSION is not set!"
+            exit 1
+          else
+            echo "Using MI_VERSION=$MI_VERSION"
+          fi
+
+      # 步骤 4：登录 GitHub 容器注册表
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Load .env variables
-        run: |
-          export $(grep -v '^#' .env | xargs)
-          echo MI_VERSION=${MI_VERSION} >> $GITHUB_ENV
-
-      - name: Build and push
+      # 步骤 5：构建并推送镜像
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          context: .  # 使用当前目录作为构建上下文
+          push: true  # 构建完成后推送到仓库
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.MI_VERSION }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
           build-args: |
             MI_VERSION=${{ env.MI_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 步骤 6：生成镜像链接
+      - name: Show image URL
+        run: |
+          echo "Docker image pushed to:"
+          echo "https://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/pkgs/container/${{ env.IMAGE_NAME }}"
