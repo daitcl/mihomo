@@ -54,19 +54,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 步骤 5：构建并推送镜像
+      # 步骤 5：设置buildx缓存机制
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          install: true
+
+      # 步骤 6：构建并推送镜像  
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .  # 使用当前目录作为构建上下文
-          push: true  # 构建完成后推送到仓库
+          context: .
+          push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.MI_VERSION }}
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
-          build-args: |
-            MI_VERSION=${{ env.MI_VERSION }}
+            ghcr.io/daitcl/mihomo:${{ inputs.mihomo_version }}
+            ghcr.io/daitcl/mihomo:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
       # 步骤 6：生成镜像链接
       - name: Show image URL
