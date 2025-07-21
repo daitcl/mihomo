@@ -1,0 +1,216 @@
+# 基础配置
+mixed-port: 7890
+socks-port: 7891
+port: 7892
+redir-port: 7893
+tproxy-port: 7894
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: ${LOG_LEVEL}
+external-controller: '0.0.0.0:9090'
+secret: '${CLASH_SECRET}'
+
+# 网络增强
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+# 单代理提供者配置
+proxy-providers:
+  ${SUBSCRIBE_NAME}:
+    type: http
+    url: "${SUBSCRIBE_URL}"
+    path: ./providers/main.yaml
+    interval: 86400
+    health-check:
+      enable: true
+      url: "https://www.gstatic.com/generate_204"
+      interval: 300
+
+# 地理数据源
+geodata-mode: true
+geox-url:
+  geoip: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geosite: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  mmdb: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
+  asn: "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb"
+
+# DNS配置
+dns:
+  enable: true
+  ipv6: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-filter:
+    - "*"
+    - "+.lan"
+    - "+.local"
+    - "+.market.xiaomi.com"
+  nameserver:
+    - https://120.53.53.53/dns-query
+    - https://223.5.5.5/dns-query
+  proxy-server-nameserver:
+    - https://120.53.53.53/dns-query
+    - https://223.5.5.5/dns-query
+  nameserver-policy:
+    "geosite:cn,private":
+      - https://120.53.53.53/dns-query
+      - https://223.5.5.5/dns-query
+    "geosite:geolocation-!cn":
+      - "https://dns.cloudflare.com/dns-query"
+      - "https://dns.google/dns-query"
+
+# 代理分组
+proxy-groups:
+  - name: 默认
+    type: select
+    proxies: [自动选择, 直连, 国内节点, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点]
+
+  # ========== 服务分组 ========== 
+  - name: Google
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: Telegram
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: Twitter
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: 哔哩哔哩
+    type: select
+    proxies: [直连, 自动选择, 香港, 台湾, 日本]
+
+  - name: 巴哈姆特
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: YouTube
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: NETFLIX
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: Spotify
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: Github
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  - name: 其他
+    type: select
+    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+
+  # ========== 节点分组 ==========
+  - name: 国内节点
+    type: select
+    include-all: true
+    filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|移动|联通|电信|cn|china"
+
+  - name: 香港
+    type: select
+    include-all: true
+    filter: "(?i)港|hk|hongkong|hong kong"
+    exclude-filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china"
+
+  - name: 台湾
+    type: select
+    include-all: true
+    filter: "(?i)台|tw|taiwan"
+    exclude-filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china"
+
+  - name: 日本
+    type: select
+    include-all: true
+    filter: "(?i)日|jp|japan"
+    exclude-filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china"
+
+  - name: 美国
+    type: select
+    include-all: true
+    filter: "(?i)美|us|unitedstates|united states"
+    exclude-filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china"
+
+  - name: 新加坡
+    type: select
+    include-all: true
+    filter: "(?i)(新|sg|singapore)"
+    exclude-filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china"
+
+  - name: 其它地区
+    type: select
+    include-all: true
+    exclude-filter: "(?i)(新|sg|singapore|港|hk|hongkong|hong kong|台|tw|taiwan|日|jp|japan|美|us|unitedstates|united states|回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china)"
+
+  - name: 全部节点
+    type: select
+    include-all: true
+
+  - name: 自动选择
+    type: url-test
+    include-all: true
+    tolerance: 10
+    exclude-filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china"
+
+proxies: 
+  - name: "直连"
+    type: direct
+    udp: true
+
+rules:
+  # 基础规则
+  - GEOIP,lan,直连,no-resolve
+  - GEOSITE,private,直连,no-resolve
+  - GEOSITE,category-ads-all,REJECT
+  
+  # 国内服务直连
+  - GEOSITE,cn,直连
+  - GEOSITE,onedrive,直连
+  - GEOSITE,microsoft@cn,直连
+  - GEOSITE,apple-cn,直连
+  - GEOSITE,steam@cn,直连
+  - GEOSITE,category-games@cn,直连
+  - GEOSITE,bilibili,直连
+  
+  # 国际服务分流
+  - GEOSITE,biliintl,哔哩哔哩
+  - GEOSITE,github,Github
+  - GEOSITE,twitter,Twitter
+  - GEOSITE,youtube,YouTube
+  - GEOSITE,google,Google
+  - GEOSITE,telegram,Telegram
+  - GEOSITE,netflix,NETFLIX
+  - GEOSITE,bahamut,巴哈姆特
+  - GEOSITE,spotify,Spotify
+  
+  # 特殊规则
+  - GEOSITE,category-scholar-!cn,默认
+  - GEOSITE,geolocation-!cn,其他
+  
+  # IP规则
+  - GEOIP,private,直连,no-resolve
+  - GEOIP,telegram,Telegram,no-resolve
+  - GEOIP,twitter,Twitter,no-resolve
+  - GEOIP,google,Google,no-resolve
+  - GEOIP,netflix,NETFLIX,no-resolve
+  - GEOIP,CN,直连,no-resolve
+  - GEOIP,JP,其他,no-resolve
+  
+  # 端口规则
+  - DST-PORT,80/8080/443/8443,其他
+  
+  # 最终规则
+  - MATCH,其他

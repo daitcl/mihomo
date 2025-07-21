@@ -1,0 +1,11 @@
+:8080 {
+  file_server
+  
+  root * .
+  
+  try_files {path} /index.html
+}
+
+:8080/api* {
+  reverse_proxy localhost:9090
+}

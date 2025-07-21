@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mihomo:
+    container_name: mihomo
+    image: daitcl/mihomo:v1.19.11
+    build:
+      context: .
+      args:
+        - MI_VERSION=${MI_VERSION:-v1.19.11}  # 默认版本，可通过.env覆盖
+    restart: always
+    environment:
+      # 核心配置
+      - TZ=Asia/Shanghai
+      - LOG_LEVEL=silent
+      - CLASH_SECRET=  
+      - SUBSCRIBE_URL=your_subscribe_url
+      - SUBSCRIBE_NAME=your_subscribe_name
+    ports:
+      - "7890:7890"  # HTTP代理
+      - "7891:7891"  # SOCKS5代理
+      - "7892:7892"  # 混合代理
+      - "7893:7893"  # TPROXY
+      - "7894:7894"  # REDIR
+      - "9090:9090"  # Clash控制API
+      - "7888:8080"  # Metacubexd Web UI
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./clash-config:/root/.config/mihomo  # Clash配置文件目录
+      - ./metacubexd-config:/config/caddy    # Metacubexd配置目录
+      # - /etc/timezone:/etc/timezone:ro       # 共享主机时区
+      # - /etc/localtime:/etc/localtime:ro
+    # 如需启用TUN模式，取消以下注释
+    # cap_add:
+    #   - NET_ADMIN
+    # devices:
+    #   - /dev/net/tun:/dev/net/tun
+    networks:
+      - clash-net
+
+networks:
+  clash-net:
+    driver: bridge
