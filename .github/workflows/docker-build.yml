@@ -17,7 +17,6 @@ env:
   IMAGE_NAME: mihomo
   REGISTRY: ghcr.io
   DOCKERHUB_IMAGE_NAME: daitcl/mihomo
-  # 移除占位符，确保正确加载
 
 jobs:
   build-and-push:
@@ -29,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 步骤 2：增强环境变量加载
+      # 步骤 2：修复环境变量加载
       - name: Load environment variables
         id: set-versions
         run: |
@@ -42,28 +41,24 @@ jobs:
           # 处理Windows换行符
           sed -i 's/\r$//' .env
           
-          # 加载变量并设置到GITHUB_ENV
-          while IFS= read -r line; do
-            if [[ -n "$line" && ! "$line" =~ ^\s*# ]]; then
-              key="${line%%=*}"
-              value="${line#*=}"
-              
-              # 清理值中的引号
-              value=$(echo "$value" | sed "s/^['\"]//;s/['\"]$//")
-              
-              # 导出变量
-              echo "$key=$value" >> $GITHUB_ENV
-              echo "Set $key=$value"
-            fi
-          done < .env
+          # 使用source加载环境变量
+          set -a
+          source .env
+          set +a
           
-          # 检查必需变量是否设置
-          if [ -z "$MI_VERSION" ]; then
+          # 将变量导出到GITHUB_ENV
+          if [ -n "$MI_VERSION" ]; then
+            echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
+            echo "Set MI_VERSION=$MI_VERSION"
+          else
             echo "::error::MI_VERSION is not set in .env file!"
             exit 1
           fi
           
-          if [ -z "$MetaCubeX_VERSION" ]; then
+          if [ -n "$MetaCubeX_VERSION" ]; then
+            echo "MetaCubeX_VERSION=$MetaCubeX_VERSION" >> $GITHUB_ENV
+            echo "Set MetaCubeX_VERSION=$MetaCubeX_VERSION"
+          else
             echo "::error::MetaCubeX_VERSION is not set in .env file!"
             exit 1
           fi
