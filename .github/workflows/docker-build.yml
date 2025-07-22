@@ -1,4 +1,4 @@
-name: Optimized Docker Build and Push
+name: Docker Build and Push
 
 on:
   push:

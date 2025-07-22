@@ -1,4 +1,4 @@
-name: Update Dependency Versions
+name: Update Versions
 
 on:
   schedule:
