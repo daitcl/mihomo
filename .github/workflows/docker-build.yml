@@ -77,10 +77,8 @@ jobs:
           context: .
           push: true
           tags: |
-            # GitHub Container Registry 标签
             ghcr.io/daitcl/mihomo:${{ env.MI_VERSION }}
             ghcr.io/daitcl/mihomo:latest
-            # Docker Hub 标签（新增）
             ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}
             ${{ env.DOCKERHUB_IMAGE_NAME }}:latest
           build-args: |
