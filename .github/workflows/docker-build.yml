@@ -90,7 +90,15 @@ jobs:
           labels: |
             org.opencontainers.image.description=${{ steps.generate_notes.outputs.notes_content }}
 
-      # 步骤 7：生成镜像链接（增加 Docker Hub 链接）
+      # 更新 Docker Hub 仓库描述
+      - name: Update Docker Hub repository description
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          DESCRIPTION=$(cat release_notes.md.template)
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username":"${{ secrets.DOCKERHUB_USERNAME }}","password":"${{ secrets.DOCKERHUB_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
+          curl -s -X PATCH -H "Authorization: JWT $TOKEN" -H "Content-Type: application/json" -d '{"description":"'"${DESCRIPTION}"'"}' https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_IMAGE_NAME }}/
+
+      # 步骤 7：生成镜像链接
       - name: Show image URLs
         run: |
           echo "GitHub Container Registry:"
