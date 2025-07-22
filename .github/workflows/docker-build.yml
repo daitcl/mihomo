@@ -10,6 +10,7 @@ on:
       - config.yaml.template
       - .github/workflows/*.yml
       - .env
+      - release_notes.md.template
   workflow_dispatch:
 
 env:
@@ -29,12 +30,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 步骤 2：加载 .env 变量并设置版本
+      # 步骤 2：安全加载 .env 变量
       - name: Load environment variables
         id: set-versions
         run: |
           sed -i 's/\r$//' .env
-          export $(grep -v '^#' .env | xargs)
+          
+          while IFS= read -r line; do
+            if [[ -n "$line" && ! "$line" =~ ^\s*# ]]; then
+              key="${line%%=*}"
+              value="${line#*=}"
+              export "$key=$value"
+              echo "$key=$value" >> $GITHUB_ENV
+              echo "Set $key=$value"
+            fi
+          done < .env
           
           if [ -z "$MI_VERSION" ]; then
             echo "::error::MI_VERSION is not set in .env file!"
@@ -46,11 +56,34 @@ jobs:
             exit 1
           fi
           
-          echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
-          echo "MetaCubeX_VERSION=$MetaCubeX_VERSION" >> $GITHUB_ENV
-          echo "IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+          IMAGE_FULL_NAME="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+          echo "IMAGE_FULL_NAME=$IMAGE_FULL_NAME" >> $GITHUB_ENV
+          echo "Set IMAGE_FULL_NAME=$IMAGE_FULL_NAME"
 
-      # 步骤 3：登录容器注册表
+      # 步骤 3：清理 Dockerfile 中的注释
+      - name: Clean Dockerfile comments
+        run: |
+          awk '
+          {
+            in_run = 0
+            if ($1 == "RUN") {
+              in_run = 1
+              printf "RUN "
+              for (i=2; i<=NF; i++) {
+                if ($i ~ /^#/) break
+                printf "%s ", $i
+              }
+              printf "\n"
+            } else {
+              print $0
+            }
+          }' Dockerfile > Dockerfile.tmp
+          
+          mv Dockerfile.tmp Dockerfile
+          echo "Cleaned Dockerfile comments:"
+          cat Dockerfile
+
+      # 步骤 4：登录容器注册表
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -64,14 +97,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤 4：设置buildx
+      # 步骤 5：设置buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
           install: true
 
-      # 步骤 5：生成发布说明
+      # 步骤 6：生成发布说明
       - name: Generate release notes
         id: generate_notes
         run: |
@@ -83,13 +116,12 @@ jobs:
           echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
           echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
           
-          NOTES_CONTENT=$(jq -Rs . < release_notes.md)
-          echo "notes_content=$NOTES_CONTENT" >> $GITHUB_OUTPUT
+          cp release_notes.md release_notes_final.md
           
           echo "Generated release notes:"
           cat release_notes.md
 
-      # 步骤 6：构建并推送镜像
+      # 步骤 7：构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -110,32 +142,43 @@ jobs:
             org.opencontainers.image.version=${{ env.MI_VERSION }}
             org.opencontainers.image.description=Clash core with Metacubexd dashboard
 
-      # 步骤 7：更新 Docker Hub 仓库描述（修复版）
+      # 步骤 8：安全更新 Docker Hub 仓库描述
       - name: Update Docker Hub repository description
         run: |
           sudo apt-get update && sudo apt-get install -y jq
           
+          LOGIN_PAYLOAD=$(jq -n \
+            --arg username "${{ secrets.DOCKERHUB_USERNAME }}" \
+            --arg password "${{ secrets.DOCKERHUB_TOKEN }}" \
+            '{"username": $username, "password": $password}')
+          
           LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST \
-            -d '{"username": "'"${{ secrets.DOCKERHUB_USERNAME }}"'", "password": "'"${{ secrets.DOCKERHUB_TOKEN }}"'"}' \
+            -d "$LOGIN_PAYLOAD" \
             https://hub.docker.com/v2/users/login/)
           
           JWT_TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
           
-          if [ -z "$JWT_TOKEN" ]; then
+          if [ -z "$JWT_TOKEN" ] || [ "$JWT_TOKEN" = "null" ]; then
             echo "::error::Failed to obtain JWT token from Docker Hub"
+            echo "Login payload: $LOGIN_PAYLOAD"
             echo "Login response: $LOGIN_RESPONSE"
             exit 1
           fi
           
+          DESCRIPTION_CONTENT=$(cat release_notes_final.md)
+          REQUEST_BODY=$(jq -n \
+            --arg desc "$DESCRIPTION_CONTENT" \
+            '{"full_description": $desc}')
+          
           curl -X PATCH \
             -H "Authorization: JWT $JWT_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"full_description": '${{ steps.generate_notes.outputs.notes_content }}'}' \
+            -d "$REQUEST_BODY" \
             "https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_IMAGE_NAME }}/"
           
           echo "Successfully updated Docker Hub description"
 
-      # 步骤 8：显示构建信息
+      # 步骤 9：显示构建信息
       - name: Show build information
         run: |
           echo "=== Build Summary ==="
@@ -149,4 +192,4 @@ jobs:
           echo "https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
           echo ""
           echo "Release Notes:"
-          cat release_notes.md
+          cat release_notes_final.md
