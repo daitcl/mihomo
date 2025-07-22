@@ -15,10 +15,10 @@ on:
 env:
   IMAGE_NAME: mihomo
   REGISTRY: ghcr.io
-  # 新增 Docker Hub 镜像名称
-  DOCKERHUB_IMAGE_NAME: daitcl/mihomo  # 替换为你的 Docker Hub 仓库名
-  MetaCubeX_VERSION: ''
-  MI_VERSION: ''
+  DOCKERHUB_IMAGE_NAME: daitcl/mihomo
+  # 使用占位符，将在步骤中替换为实际值
+  MI_VERSION: '$MI_VERSION_PLACEHOLDER'
+  MetaCubeX_VERSION: '$MetaCubeX_VERSION_PLACEHOLDER'
 
 jobs:
   build-and-push:
@@ -30,25 +30,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 步骤 2：加载 .env 变量
+      # 步骤 2：加载 .env 变量并设置版本
       - name: Load environment variables
+        id: set-versions
         run: |
           sed -i 's/\r$//' .env
+          
           export $(grep -v '^#' .env | xargs)
+          
+          if [ -z "$MI_VERSION" ]; then
+            echo "::error::MI_VERSION is not set in .env file!"
+            exit 1
+          fi
+          
+          if [ -z "$MetaCubeX_VERSION" ]; then
+            echo "::error::MetaCubeX_VERSION is not set in .env file!"
+            exit 1
+          fi
+          
           echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
           echo "MetaCubeX_VERSION=$MetaCubeX_VERSION" >> $GITHUB_ENV
+          echo "IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
 
-      # 步骤 3：验证版本号
-      - name: Validate MI_VERSION
-        run: |
-          if [ -z "$MI_VERSION" ]; then
-            echo "::error::MI_VERSION is not set!"
-            exit 1
-          else
-            echo "Using MI_VERSION=$MI_VERSION"
-          fi
-
-      # 步骤 4：登录 GitHub 容器注册表
+      # 步骤 3：登录容器注册表
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -56,29 +60,50 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 新增步骤：登录 Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤 5：设置buildx缓存机制
+      # 步骤 4：设置buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
           install: true
 
-      # 步骤 6：构建并推送镜像（增加 Docker Hub 标签）
+      # 步骤 5：生成发布说明
+      - name: Generate release notes
+        id: generate_notes
+        run: |
+          sed -e "s/{{MI_VERSION}}/${{ env.MI_VERSION }}/g" \
+              -e "s/{{MetaCubeX_VERSION}}/${{ env.MetaCubeX_VERSION }}/g" \
+              release_notes.md.template > release_notes.md
+          
+          echo -e "\n### 镜像URL" >> release_notes.md
+          echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
+          echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
+          
+          NOTES_CONTENT=$(cat release_notes.md | jq -Rs .)
+          echo "notes_content=$NOTES_CONTENT" >> $GITHUB_OUTPUT
+          
+          echo "Generated release notes:"
+          cat release_notes.md
+        env:
+          # 确保使用最新设置的环境变量
+          MI_VERSION: ${{ env.MI_VERSION }}
+          MetaCubeX_VERSION: ${{ env.MetaCubeX_VERSION }}
+
+      # 步骤 6：构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/daitcl/mihomo:${{ env.MI_VERSION }}
-            ghcr.io/daitcl/mihomo:latest
+            ${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}
+            ${{ env.IMAGE_FULL_NAME }}:latest
             ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}
             ${{ env.DOCKERHUB_IMAGE_NAME }}:latest
           build-args: |
@@ -88,20 +113,33 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
           labels: |
-            org.opencontainers.image.description=${{ steps.generate_notes.outputs.notes_content }}
+            org.opencontainers.image.version=${{ env.MI_VERSION }}
+            org.opencontainers.image.description=Clash core with Metacubexd dashboard
 
-      # 更新 Docker Hub 仓库描述
+      # 步骤 7：更新 Docker Hub 仓库描述
       - name: Update Docker Hub repository description
         run: |
           sudo apt-get update && sudo apt-get install -y jq
-          DESCRIPTION=$(cat release_notes.md.template; echo -e "\nImage URLs:\n- GHCR: https://ghcr.io/daitcl/mihomo\n- Docker Hub: https://hub.docker.com/r/daitcl/mihomo")
-          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username":"${{ secrets.DOCKERHUB_USERNAME }}","password":"${{ secrets.DOCKERHUB_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
-          jq -n --arg desc "$DESCRIPTION" '{"description": $desc}' | curl -s -X PATCH -H "Authorization: JWT $TOKEN" -H "Content-Type: application/json" -d @- https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_IMAGE_NAME }}/
+          curl -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.DOCKERHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"full_description": '${{ steps.generate_notes.outputs.notes_content }}'}' \
+            "https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_IMAGE_NAME }}/"
+          
+          echo "Successfully updated Docker Hub description"
 
-      # 步骤 7：生成镜像链接
-      - name: Show image URLs
+      # 步骤 8：显示构建信息
+      - name: Show build information
         run: |
+          echo "=== Build Summary ==="
+          echo "Image Version: ${{ env.MI_VERSION }}"
+          echo "Metacubexd Version: ${{ env.MetaCubeX_VERSION }}"
+          echo ""
           echo "GitHub Container Registry:"
           echo "https://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/pkgs/container/${{ env.IMAGE_NAME }}"
+          echo ""
           echo "Docker Hub Registry:"
           echo "https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
+          echo ""
+          echo "Release Notes:"
+          cat release_notes.md
