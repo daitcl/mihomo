@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Optimized Docker Build and Push
 
 on:
   push:
@@ -22,122 +22,27 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      # 步骤 1：检出代码
+      # 步骤1：检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 步骤 2：修复环境变量加载
+      # 步骤2：加载环境变量
       - name: Load environment variables
-        id: set-versions
-        run: |
-          # 确保.env文件存在
-          if [ ! -f .env ]; then
-            echo "::error::.env file not found!"
-            exit 1
-          fi
-          
-          # 处理Windows换行符
-          sed -i 's/\r$//' .env
-          
-          # 使用source加载环境变量
-          set -a
-          source .env
-          set +a
-          
-          # 将变量导出到GITHUB_ENV
-          if [ -n "$MI_VERSION" ]; then
-            echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
-            echo "Set MI_VERSION=$MI_VERSION"
-          else
-            echo "::error::MI_VERSION is not set in .env file!"
-            exit 1
-          fi
-          
-          if [ -n "$MetaCubeX_VERSION" ]; then
-            echo "MetaCubeX_VERSION=$MetaCubeX_VERSION" >> $GITHUB_ENV
-            echo "Set MetaCubeX_VERSION=$MetaCubeX_VERSION"
-          else
-            echo "::error::MetaCubeX_VERSION is not set in .env file!"
-            exit 1
-          fi
-          
-          # 设置镜像完整名称
-          IMAGE_FULL_NAME="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
-          echo "IMAGE_FULL_NAME=$IMAGE_FULL_NAME" >> $GITHUB_ENV
-          echo "Set IMAGE_FULL_NAME=$IMAGE_FULL_NAME"
+        uses: ./.github/actions/load-env # 创建专用action
+        id: env-loader
 
-      # 步骤 3：打印环境变量（调试）
-      - name: Print environment variables
-        run: |
-          echo "MI_VERSION: ${{ env.MI_VERSION }}"
-          echo "MetaCubeX_VERSION: ${{ env.MetaCubeX_VERSION }}"
-          echo "IMAGE_FULL_NAME: ${{ env.IMAGE_FULL_NAME }}"
-
-      # 步骤 4：验证 MetaCubeX 版本
+      # 步骤3：验证版本
       - name: Verify MetaCubeX version
         run: |
-          echo "Verifying MetaCubeX version: ${{ env.MetaCubeX_VERSION }}"
-          
-          # 获取所有可用的标签
-          TAGS=$(git ls-remote --tags https://github.com/MetaCubeX/metacubexd.git | awk -F/ '{print $3}' | sort -V)
-          
-          # 检查版本是否存在
-          if ! echo "$TAGS" | grep -q "^${{ env.MetaCubeX_VERSION }}$"; then
+          if ! git ls-remote --exit-code --tags https://github.com/MetaCubeX/metacubexd.git refs/tags/${{ env.MetaCubeX_VERSION }}; then
             echo "::error::MetaCubeX version ${{ env.MetaCubeX_VERSION }} does not exist!"
-            echo "Available versions:"
-            echo "$TAGS"
             exit 1
           fi
-          
-          echo "Version ${{ env.MetaCubeX_VERSION }} is valid"
 
-      # 步骤 5：清理 Dockerfile 中的注释
-      - name: Clean Dockerfile comments
-        run: |
-          awk '
-          {
-            if ($1 == "RUN") {
-              printf "RUN "
-              for (i=2; i<=NF; i++) {
-                if ($i ~ /^#/) break
-                printf "%s ", $i
-              }
-              printf "\n"
-            } else {
-              print $0
-            }
-          }' Dockerfile > Dockerfile.tmp
-          
-          mv Dockerfile.tmp Dockerfile
-          echo "Cleaned Dockerfile comments:"
-          cat Dockerfile
-
-      # 步骤 6：登录容器注册表
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # 步骤 7：设置buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker-container
-          install: true
-
-      # 步骤 8：生成发布说明
+      # 步骤4：生成发布说明
       - name: Generate release notes
-        id: generate_notes
         run: |
           sed -e "s/{{MI_VERSION}}/${{ env.MI_VERSION }}/g" \
               -e "s/{{MetaCubeX_VERSION}}/${{ env.MetaCubeX_VERSION }}/g" \
@@ -146,13 +51,18 @@ jobs:
           echo -e "\n### 镜像URL" >> release_notes.md
           echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
           echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
-          
-          cp release_notes.md release_notes_final.md
-          
-          echo "Generated release notes:"
-          cat release_notes.md
 
-      # 步骤 9：构建并推送镜像
+      # 步骤5：登录容器注册表
+      - name: Login to registries
+        uses: docker/login-action@v3
+        with:
+          registries: |
+            ${{ env.REGISTRY }}
+            docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 步骤6：构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -166,64 +76,26 @@ jobs:
           build-args: |
             MI_VERSION=${{ env.MI_VERSION }}
             MetaCubeX_VERSION=${{ env.MetaCubeX_VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           platforms: linux/amd64
           labels: |
             org.opencontainers.image.version=${{ env.MI_VERSION }}
             org.opencontainers.image.description=Clash core with Metacubexd dashboard
 
-      # 步骤 10：安全更新 Docker Hub 仓库描述
-      - name: Update Docker Hub repository description
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          
-          # 获取 JWT 令牌
-          LOGIN_PAYLOAD=$(jq -n \
-            --arg username "${{ secrets.DOCKERHUB_USERNAME }}" \
-            --arg password "${{ secrets.DOCKERHUB_TOKEN }}" \
-            '{"username": $username, "password": $password}')
-          
-          LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST \
-            -d "$LOGIN_PAYLOAD" \
-            https://hub.docker.com/v2/users/login/)
-          
-          JWT_TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
-          
-          if [ -z "$JWT_TOKEN" ] || [ "$JWT_TOKEN" = "null" ]; then
-            echo "::error::Failed to obtain JWT token from Docker Hub"
-            echo "Login payload: $LOGIN_PAYLOAD"
-            echo "Login response: $LOGIN_RESPONSE"
-            exit 1
-          fi
-          
-          # 创建请求体
-          DESCRIPTION_CONTENT=$(cat release_notes_final.md)
-          REQUEST_BODY=$(jq -n \
-            --arg desc "$DESCRIPTION_CONTENT" \
-            '{"full_description": $desc}')
-          
-          # 发送API请求
-          curl -X PATCH \
-            -H "Authorization: JWT $JWT_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$REQUEST_BODY" \
-            "https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_IMAGE_NAME }}/"
-          
-          echo "Successfully updated Docker Hub description"
+      # 步骤7：更新Docker Hub描述
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_IMAGE_NAME }}
+          readme-filepath: ./release_notes.md
 
-      # 步骤 11：显示构建信息
+      # 步骤8：显示构建信息
       - name: Show build information
         run: |
           echo "=== Build Summary ==="
           echo "Image Version: ${{ env.MI_VERSION }}"
           echo "Metacubexd Version: ${{ env.MetaCubeX_VERSION }}"
-          echo ""
           echo "GitHub Container Registry:"
           echo "https://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/pkgs/container/${{ env.IMAGE_NAME }}"
-          echo ""
-          echo "Docker Hub Registry:"
-          echo "https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
-          echo ""
-          echo "Release Notes:"
-          cat release_notes_final.md
+          echo "Docker Hub: https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
