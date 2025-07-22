@@ -60,14 +60,28 @@ jobs:
           echo "IMAGE_FULL_NAME=$IMAGE_FULL_NAME" >> $GITHUB_ENV
           echo "Set IMAGE_FULL_NAME=$IMAGE_FULL_NAME"
 
-      # 步骤 3：清理 Dockerfile 中的注释
+      # 步骤 3：验证 MetaCubeX 版本
+      - name: Verify MetaCubeX version
+        run: |
+          echo "Verifying MetaCubeX version: ${{ env.MetaCubeX_VERSION }}"
+          
+          TAGS=$(git ls-remote --tags https://github.com/MetaCubeX/metacubexd.git | awk -F/ '{print $3}' | sort -V)
+          
+          if ! echo "$TAGS" | grep -q "^${{ env.MetaCubeX_VERSION }}$"; then
+            echo "::error::MetaCubeX version ${{ env.MetaCubeX_VERSION }} does not exist!"
+            echo "Available versions:"
+            echo "$TAGS"
+            exit 1
+          fi
+          
+          echo "Version ${{ env.MetaCubeX_VERSION }} is valid"
+
+      # 步骤 4：清理 Dockerfile 中的注释
       - name: Clean Dockerfile comments
         run: |
           awk '
           {
-            in_run = 0
             if ($1 == "RUN") {
-              in_run = 1
               printf "RUN "
               for (i=2; i<=NF; i++) {
                 if ($i ~ /^#/) break
@@ -83,7 +97,7 @@ jobs:
           echo "Cleaned Dockerfile comments:"
           cat Dockerfile
 
-      # 步骤 4：登录容器注册表
+      # 步骤 5：登录容器注册表
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -97,14 +111,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤 5：设置buildx
+      # 步骤 6：设置buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
           install: true
 
-      # 步骤 6：生成发布说明
+      # 步骤 7：生成发布说明
       - name: Generate release notes
         id: generate_notes
         run: |
@@ -121,7 +135,7 @@ jobs:
           echo "Generated release notes:"
           cat release_notes.md
 
-      # 步骤 7：构建并推送镜像
+      # 步骤 8：构建并推送镜像 - 添加重试机制
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -141,8 +155,10 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ env.MI_VERSION }}
             org.opencontainers.image.description=Clash core with Metacubexd dashboard
+          no-cache: false
+          pull: true
 
-      # 步骤 8：安全更新 Docker Hub 仓库描述
+      # 步骤 9：安全更新 Docker Hub 仓库描述
       - name: Update Docker Hub repository description
         run: |
           sudo apt-get update && sudo apt-get install -y jq
@@ -178,7 +194,7 @@ jobs:
           
           echo "Successfully updated Docker Hub description"
 
-      # 步骤 9：显示构建信息
+      # 步骤 10：显示构建信息
       - name: Show build information
         run: |
           echo "=== Build Summary ==="
