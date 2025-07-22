@@ -28,18 +28,53 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 步骤2：加载环境变量
+      # 步骤2：加载环境变量（内联实现）
       - name: Load environment variables
-        uses: ./.github/actions/load-env # 创建专用action
-        id: env-loader
+        id: set-versions
+        run: |
+          # 确保.env文件存在
+          if [ ! -f .env ]; then
+            echo "::error::.env file not found!"
+            exit 1
+          fi
+          
+          # 处理Windows换行符
+          sed -i 's/\r$//' .env
+          
+          # 安全加载变量
+          while IFS= read -r line; do
+            [[ $line =~ ^# ]] && continue  # 跳过注释
+            [[ -z $line ]] && continue     # 跳过空行
+            
+            # 提取变量名和值
+            var_name=$(echo "$line" | cut -d '=' -f1)
+            var_value=$(echo "$line" | cut -d '=' -f2-)
+            
+            # 设置到GITHUB_ENV
+            echo "$var_name=$var_value" >> $GITHUB_ENV
+            echo "Set $var_name"
+          done < .env
+          
+          # 设置镜像完整名称
+          echo "IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+          echo "Set IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
 
       # 步骤3：验证版本
       - name: Verify MetaCubeX version
         run: |
-          if ! git ls-remote --exit-code --tags https://github.com/MetaCubeX/metacubexd.git refs/tags/${{ env.MetaCubeX_VERSION }}; then
+          # 直接检查特定标签是否存在
+          if ! git ls-remote --exit-code --tags \
+            https://github.com/MetaCubeX/metacubexd.git \
+            "refs/tags/${{ env.MetaCubeX_VERSION }}"; then
+            
             echo "::error::MetaCubeX version ${{ env.MetaCubeX_VERSION }} does not exist!"
+            # 获取最新5个标签用于调试
+            echo "Last 5 available versions:"
+            git ls-remote --tags https://github.com/MetaCubeX/metacubexd.git \
+              | awk -F/ '{print $3}' | sort -V | tail -5
             exit 1
           fi
+          echo "Version ${{ env.MetaCubeX_VERSION }} is valid"
 
       # 步骤4：生成发布说明
       - name: Generate release notes
@@ -53,12 +88,16 @@ jobs:
           echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
 
       # 步骤5：登录容器注册表
-      - name: Login to registries
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registries: |
-            ${{ env.REGISTRY }}
-            docker.io
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
