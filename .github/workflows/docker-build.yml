@@ -116,12 +116,25 @@ jobs:
             org.opencontainers.image.version=${{ env.MI_VERSION }}
             org.opencontainers.image.description=Clash core with Metacubexd dashboard
 
-      # 步骤 7：更新 Docker Hub 仓库描述
+        # 步骤 7：更新 Docker Hub 仓库描述
       - name: Update Docker Hub repository description
         run: |
           sudo apt-get update && sudo apt-get install -y jq
+          
+          LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST \
+            -d '{"username": "'"${{ secrets.DOCKERHUB_USERNAME }}"'", "password": "'"${{ secrets.DOCKERHUB_TOKEN }}"'"}' \
+            https://hub.docker.com/v2/users/login/)
+          
+          JWT_TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
+          
+          if [ -z "$JWT_TOKEN" ]; then
+            echo "::error::Failed to obtain JWT token from Docker Hub"
+            echo "Login response: $LOGIN_RESPONSE"
+            exit 1
+          fi
+          
           curl -X PATCH \
-            -H "Authorization: Bearer ${{ secrets.DOCKERHUB_TOKEN }}" \
+            -H "Authorization: JWT $JWT_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"full_description": '${{ steps.generate_notes.outputs.notes_content }}'}' \
             "https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_IMAGE_NAME }}/"
