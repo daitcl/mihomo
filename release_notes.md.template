@@ -2,67 +2,19 @@
 
 mihomo 是一个基于 Clash 核心的代理工具镜像，集成了 Metacubexd 管理面板，提供强大的代理功能和直观的 Web 管理界面。
 
+
 **构建信息**
 - mihomo 核心版本: `{{MI_VERSION}}`
 - Metacubexd 面板版本: `{{MetaCubeX_VERSION}}`
 
-## 特性
-✅ 包含最新地理规则数据库
-✅ 使用 Caddy 2.6 作为反向代理
-✅ 预装健康检查脚本
-✅ 支持 Linux amd64 架构
-✅ 内置端口：7890-7894 (SOCKS5/HTTP/混合代理)
-✅ 管理面板端口：8080
-
-## 快速开始
 ### 拉取镜像
 ```bash
 # Docker Hub
 docker pull daitcl/mihomo:{{MI_VERSION}}
-```
-
-```bash
 # GitHub Container Registry
 docker pull ghcr.io/daitcl/mihomo:{{MI_VERSION}}
-```
-
-### 启动容器
-```bash
+# 启动容器
 docker run -d --name mihomo -p 7890:7890 -p 8080:8080 daitcl/mihomo:{{MI_VERSION}}
 ```
 
-## Docker Compose 配置
-```yaml
-version: '3.8'
-
-services:
-  mihomo:
-    container_name: mihomo
-    image: {{IMAGE_REGISTRY}}/daitcl/mihomo:{{MI_VERSION}}
-    restart: always
-    environment:
-      - TZ=Asia/Shanghai
-      - LOG_LEVEL=silent
-      - CLASH_SECRET=
-      - SUBSCRIBE_URL=your_subscribe_url
-      - SUBSCRIBE_NAME=your_subscribe_name
-    ports:
-      - "7890:7890"  # HTTP代理
-      - "7891:7891"  # SOCKS5代理
-      - "7892:7892"  # 混合代理
-      - "7893:7893"  # TPROXY
-      - "7894:7894"  # REDIR
-      - "9090:9090"  # Clash控制API
-      - "8080:8080"  # Metacubexd Web UI
-    volumes:
-      - ./clash-config:/root/.config/mihomo
-      - ./metacubexd-config:/config/caddy
-    networks:
-      - clash-net
-
-networks:
-  clash-net:
-    driver: bridge
-```
-
-> 注意: 将 {{IMAGE_REGISTRY}} 替换为 docker.io 或 ghcr.io 以使用相应的镜像源。
+> 仓库地址：https://github.com/daitcl/mihomo
