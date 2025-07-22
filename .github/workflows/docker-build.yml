@@ -16,7 +16,6 @@ env:
   IMAGE_NAME: mihomo
   REGISTRY: ghcr.io
   DOCKERHUB_IMAGE_NAME: daitcl/mihomo
-  # 使用占位符，将在步骤中替换为实际值
   MI_VERSION: '$MI_VERSION_PLACEHOLDER'
   MetaCubeX_VERSION: '$MetaCubeX_VERSION_PLACEHOLDER'
 
@@ -35,7 +34,6 @@ jobs:
         id: set-versions
         run: |
           sed -i 's/\r$//' .env
-          
           export $(grep -v '^#' .env | xargs)
           
           if [ -z "$MI_VERSION" ]; then
@@ -85,15 +83,11 @@ jobs:
           echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
           echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
           
-          NOTES_CONTENT=$(cat release_notes.md | jq -Rs .)
+          NOTES_CONTENT=$(jq -Rs . < release_notes.md)
           echo "notes_content=$NOTES_CONTENT" >> $GITHUB_OUTPUT
           
           echo "Generated release notes:"
           cat release_notes.md
-        env:
-          # 确保使用最新设置的环境变量
-          MI_VERSION: ${{ env.MI_VERSION }}
-          MetaCubeX_VERSION: ${{ env.MetaCubeX_VERSION }}
 
       # 步骤 6：构建并推送镜像
       - name: Build and push Docker image
@@ -116,7 +110,7 @@ jobs:
             org.opencontainers.image.version=${{ env.MI_VERSION }}
             org.opencontainers.image.description=Clash core with Metacubexd dashboard
 
-        # 步骤 7：更新 Docker Hub 仓库描述
+      # 步骤 7：更新 Docker Hub 仓库描述（修复版）
       - name: Update Docker Hub repository description
         run: |
           sudo apt-get update && sudo apt-get install -y jq
