@@ -17,8 +17,7 @@ env:
   IMAGE_NAME: mihomo
   REGISTRY: ghcr.io
   DOCKERHUB_IMAGE_NAME: daitcl/mihomo
-  MI_VERSION: '$MI_VERSION_PLACEHOLDER'
-  MetaCubeX_VERSION: '$MetaCubeX_VERSION_PLACEHOLDER'
+  # 移除占位符，确保正确加载
 
 jobs:
   build-and-push:
@@ -30,22 +29,35 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 步骤 2：安全加载 .env 变量
+      # 步骤 2：增强环境变量加载
       - name: Load environment variables
         id: set-versions
         run: |
+          # 确保.env文件存在
+          if [ ! -f .env ]; then
+            echo "::error::.env file not found!"
+            exit 1
+          fi
+          
+          # 处理Windows换行符
           sed -i 's/\r$//' .env
           
+          # 加载变量并设置到GITHUB_ENV
           while IFS= read -r line; do
             if [[ -n "$line" && ! "$line" =~ ^\s*# ]]; then
               key="${line%%=*}"
               value="${line#*=}"
-              export "$key=$value"
+              
+              # 清理值中的引号
+              value=$(echo "$value" | sed "s/^['\"]//;s/['\"]$//")
+              
+              # 导出变量
               echo "$key=$value" >> $GITHUB_ENV
               echo "Set $key=$value"
             fi
           done < .env
           
+          # 检查必需变量是否设置
           if [ -z "$MI_VERSION" ]; then
             echo "::error::MI_VERSION is not set in .env file!"
             exit 1
@@ -56,17 +68,27 @@ jobs:
             exit 1
           fi
           
+          # 设置镜像完整名称
           IMAGE_FULL_NAME="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
           echo "IMAGE_FULL_NAME=$IMAGE_FULL_NAME" >> $GITHUB_ENV
           echo "Set IMAGE_FULL_NAME=$IMAGE_FULL_NAME"
 
-      # 步骤 3：验证 MetaCubeX 版本
+      # 步骤 3：打印环境变量（调试）
+      - name: Print environment variables
+        run: |
+          echo "MI_VERSION: ${{ env.MI_VERSION }}"
+          echo "MetaCubeX_VERSION: ${{ env.MetaCubeX_VERSION }}"
+          echo "IMAGE_FULL_NAME: ${{ env.IMAGE_FULL_NAME }}"
+
+      # 步骤 4：验证 MetaCubeX 版本
       - name: Verify MetaCubeX version
         run: |
           echo "Verifying MetaCubeX version: ${{ env.MetaCubeX_VERSION }}"
           
+          # 获取所有可用的标签
           TAGS=$(git ls-remote --tags https://github.com/MetaCubeX/metacubexd.git | awk -F/ '{print $3}' | sort -V)
           
+          # 检查版本是否存在
           if ! echo "$TAGS" | grep -q "^${{ env.MetaCubeX_VERSION }}$"; then
             echo "::error::MetaCubeX version ${{ env.MetaCubeX_VERSION }} does not exist!"
             echo "Available versions:"
@@ -76,7 +98,7 @@ jobs:
           
           echo "Version ${{ env.MetaCubeX_VERSION }} is valid"
 
-      # 步骤 4：清理 Dockerfile 中的注释
+      # 步骤 5：清理 Dockerfile 中的注释
       - name: Clean Dockerfile comments
         run: |
           awk '
@@ -97,7 +119,7 @@ jobs:
           echo "Cleaned Dockerfile comments:"
           cat Dockerfile
 
-      # 步骤 5：登录容器注册表
+      # 步骤 6：登录容器注册表
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -111,14 +133,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤 6：设置buildx
+      # 步骤 7：设置buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
           install: true
 
-      # 步骤 7：生成发布说明
+      # 步骤 8：生成发布说明
       - name: Generate release notes
         id: generate_notes
         run: |
@@ -135,7 +157,7 @@ jobs:
           echo "Generated release notes:"
           cat release_notes.md
 
-      # 步骤 8：构建并推送镜像 - 添加重试机制
+      # 步骤 9：构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -155,14 +177,13 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ env.MI_VERSION }}
             org.opencontainers.image.description=Clash core with Metacubexd dashboard
-          no-cache: false
-          pull: true
 
-      # 步骤 9：安全更新 Docker Hub 仓库描述
+      # 步骤 10：安全更新 Docker Hub 仓库描述
       - name: Update Docker Hub repository description
         run: |
           sudo apt-get update && sudo apt-get install -y jq
           
+          # 获取 JWT 令牌
           LOGIN_PAYLOAD=$(jq -n \
             --arg username "${{ secrets.DOCKERHUB_USERNAME }}" \
             --arg password "${{ secrets.DOCKERHUB_TOKEN }}" \
@@ -181,11 +202,13 @@ jobs:
             exit 1
           fi
           
+          # 创建请求体
           DESCRIPTION_CONTENT=$(cat release_notes_final.md)
           REQUEST_BODY=$(jq -n \
             --arg desc "$DESCRIPTION_CONTENT" \
             '{"full_description": $desc}')
           
+          # 发送API请求
           curl -X PATCH \
             -H "Authorization: JWT $JWT_TOKEN" \
             -H "Content-Type: application/json" \
@@ -194,7 +217,7 @@ jobs:
           
           echo "Successfully updated Docker Hub description"
 
-      # 步骤 10：显示构建信息
+      # 步骤 11：显示构建信息
       - name: Show build information
         run: |
           echo "=== Build Summary ==="
