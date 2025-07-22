@@ -26,10 +26,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # 完整检出历史用于版本验证
 
-      # 步骤2：加载环境变量（内联实现）
-      - name: Load environment variables
+      # 步骤2：加载环境变量（修复空版本问题）
+      - name: Load and validate environment variables
         id: set-versions
         run: |
           # 确保.env文件存在
@@ -41,40 +41,47 @@ jobs:
           # 处理Windows换行符
           sed -i 's/\r$//' .env
           
-          # 安全加载变量
-          while IFS= read -r line; do
-            [[ $line =~ ^# ]] && continue  # 跳过注释
-            [[ -z $line ]] && continue     # 跳过空行
-            
-            # 提取变量名和值
-            var_name=$(echo "$line" | cut -d '=' -f1)
-            var_value=$(echo "$line" | cut -d '=' -f2-)
-            
-            # 设置到GITHUB_ENV
-            echo "$var_name=$var_value" >> $GITHUB_ENV
-            echo "Set $var_name"
-          done < .env
+          # 安全加载变量并验证必需字段
+          required_vars=("MI_VERSION" "MetaCubeX_VERSION")
+          for var in "${required_vars[@]}"; do
+            value=$(grep -E "^${var}=" .env | cut -d '=' -f2-)
+            if [ -z "$value" ]; then
+              echo "::error::Missing or empty required variable: $var in .env file"
+              exit 1
+            fi
+            echo "${var}=${value}" >> $GITHUB_ENV
+            echo "Set ${var}=${value}"
+          done
           
           # 设置镜像完整名称
           echo "IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
           echo "Set IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+          
+          # 打印验证结果
+          echo "::group::Environment Variables Validation"
+          echo "MI_VERSION: ${{ env.MI_VERSION }}"
+          echo "MetaCubeX_VERSION: ${{ env.MetaCubeX_VERSION }}"
+          echo "::endgroup::"
 
-      # 步骤3：验证版本
+      # 步骤3：验证版本（优化检查逻辑）
       - name: Verify MetaCubeX version
         run: |
-          # 直接检查特定标签是否存在
-          if ! git ls-remote --exit-code --tags \
-            https://github.com/MetaCubeX/metacubexd.git \
-            "refs/tags/${{ env.MetaCubeX_VERSION }}"; then
-            
-            echo "::error::MetaCubeX version ${{ env.MetaCubeX_VERSION }} does not exist!"
-            # 获取最新5个标签用于调试
+          version="${{ env.MetaCubeX_VERSION }}"
+          echo "Verifying MetaCubeX version: $version"
+          
+          # 使用API直接检查版本存在性（更高效）
+          api_url="https://api.github.com/repos/MetaCubeX/metacubexd/git/ref/tags/${version}"
+          response=$(curl -s -o /dev/null -w "%{http_code}" "$api_url")
+          
+          if [ "$response" != "200" ]; then
+            echo "::error::MetaCubeX version $version does not exist! (HTTP $response)"
             echo "Last 5 available versions:"
             git ls-remote --tags https://github.com/MetaCubeX/metacubexd.git \
               | awk -F/ '{print $3}' | sort -V | tail -5
             exit 1
           fi
-          echo "Version ${{ env.MetaCubeX_VERSION }} is valid"
+          
+          echo "Version $version is valid"
 
       # 步骤4：生成发布说明
       - name: Generate release notes
@@ -87,21 +94,21 @@ jobs:
           echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
           echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
 
-      # 步骤5：登录容器注册表
-      - name: Login to GitHub Container Registry
+      # 步骤5：登录容器注册表（合并登录）
+      - name: Login to container registries
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤6：构建并推送镜像
+      # 步骤6：构建并推送镜像（添加缓存优化）
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -119,8 +126,10 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ env.MI_VERSION }}
             org.opencontainers.image.description=Clash core with Metacubexd dashboard
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # 步骤7：更新Docker Hub描述
+      # 步骤7：更新Docker Hub描述（使用专用action）
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4
         with:
@@ -129,12 +138,18 @@ jobs:
           repository: ${{ env.DOCKERHUB_IMAGE_NAME }}
           readme-filepath: ./release_notes.md
 
-      # 步骤8：显示构建信息
+      # 步骤8：显示构建信息（添加镜像链接）
       - name: Show build information
         run: |
           echo "=== Build Summary ==="
           echo "Image Version: ${{ env.MI_VERSION }}"
           echo "Metacubexd Version: ${{ env.MetaCubeX_VERSION }}"
+          echo ""
           echo "GitHub Container Registry:"
           echo "https://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/pkgs/container/${{ env.IMAGE_NAME }}"
-          echo "Docker Hub: https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
+          echo ""
+          echo "Docker Hub Registry:"
+          echo "https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
+          echo ""
+          echo "Release Notes Preview:"
+          head -n 10 release_notes.md
