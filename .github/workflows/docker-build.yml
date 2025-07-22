@@ -2,19 +2,21 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [main]    # 主分支推送时触发
-    paths:                      # 只有这些文件变更才触发
+    branches: [main]
+    paths:
       - Dockerfile
       - start.sh
       - Caddyfile
       - config.yaml.template
       - .github/workflows/*.yml
       - .env
-  workflow_dispatch:            # 允许手动触发
+  workflow_dispatch:
 
 env:
   IMAGE_NAME: mihomo
   REGISTRY: ghcr.io
+  # 新增 Docker Hub 镜像名称
+  DOCKERHUB_IMAGE_NAME: daitcl/mihomo  # 替换为你的 Docker Hub 仓库名
   MetaCubeX_VERSION: ''
   MI_VERSION: ''
 
@@ -26,14 +28,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0        # 获取完整提交历史
+          fetch-depth: 0
 
       # 步骤 2：加载 .env 变量
       - name: Load environment variables
         run: |
-          # 兼容Windows换行符
           sed -i 's/\r$//' .env
-          # 直接加载变量
           export $(grep -v '^#' .env | xargs)
           echo "MI_VERSION=$MI_VERSION" >> $GITHUB_ENV
           echo "MetaCubeX_VERSION=$MetaCubeX_VERSION" >> $GITHUB_ENV
@@ -56,6 +56,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 新增步骤：登录 Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       # 步骤 5：设置buildx缓存机制
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -63,15 +70,19 @@ jobs:
           driver: docker-container
           install: true
 
-      # 步骤 6：构建并推送镜像（合并后）
+      # 步骤 6：构建并推送镜像（增加 Docker Hub 标签）
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
+            # GitHub Container Registry 标签
             ghcr.io/daitcl/mihomo:${{ env.MI_VERSION }}
             ghcr.io/daitcl/mihomo:latest
+            # Docker Hub 标签（新增）
+            ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}
+            ${{ env.DOCKERHUB_IMAGE_NAME }}:latest
           build-args: |
             MI_VERSION=${{ env.MI_VERSION }}
             MetaCubeX_VERSION=${{ env.MetaCubeX_VERSION }}
@@ -81,9 +92,10 @@ jobs:
           labels: |
             org.opencontainers.image.description=${{ steps.generate_notes.outputs.notes_content }}
 
-
-      # 步骤 8：生成镜像链接
-      - name: Show image URL
+      # 步骤 7：生成镜像链接（增加 Docker Hub 链接）
+      - name: Show image URLs
         run: |
-          echo "Docker image pushed to:"
+          echo "GitHub Container Registry:"
           echo "https://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/pkgs/container/${{ env.IMAGE_NAME }}"
+          echo "Docker Hub Registry:"
+          echo "https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
