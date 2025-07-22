@@ -1,67 +1,88 @@
-name: Check Version Updates
+name: Update Dependency Versions
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'  # 每天 UTC 时间 00:00 自动执行
+  workflow_dispatch:     # 允许手动触发
 
 jobs:
-  check-updates:
+  update:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get current versions
-        id: get_versions
-        run: |
-          MI_CURRENT=$(grep -oP 'MI_VERSION=\K[^\s]+' .env)
-          META_CURRENT=$(grep -oP 'MetaCubeX_VERSION=\K[^\s]+' .env)
-          echo "MI_CURRENT=$MI_CURRENT" >> $GITHUB_OUTPUT
-          echo "META_CURRENT=$META_CURRENT" >> $GITHUB_OUTPUT
+      - name: Get valid Mihomo version
+        id: mihomo
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = await github.rest.repos.listTags({
+              owner: 'MetaCubeX',
+              repo: 'mihomo',
+              per_page: 50
+            });
+            
+            // 筛选符合 vX.XX.XX 格式的 tags
+            const validTags = response.data
+              .map(tag => tag.name)
+              .filter(tag => /^v\d+\.\d+\.\d+$/.test(tag));
+            
+            if (validTags.length === 0) {
+              console.log('No valid tags found for mihomo');
+              return '';
+            }
+            
+            // 返回最新有效的 tag
+            return validTags[0];
 
-      - name: Get latest mihomo version
-        id: get_mi_version
-        run: |
-          LATEST_MI=$(curl -sL https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | jq -r '.tag_name')
-          echo "LATEST_MI=$LATEST_MI" >> $GITHUB_OUTPUT
+      - name: Get valid MetaCubeXD version
+        id: metacubexd
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = await github.rest.repos.listTags({
+              owner: 'MetaCubeX',
+              repo: 'metacubexd',
+              per_page: 50
+            });
+            
+            // 筛选符合 vX.XX.XX 格式的 tags
+            const validTags = response.data
+              .map(tag => tag.name)
+              .filter(tag => /^v\d+\.\d+\.\d+$/.test(tag));
+            
+            if (validTags.length === 0) {
+              console.log('No valid tags found for metacubexd');
+              return '';
+            }
+            
+            // 返回最新有效的 tag
+            return validTags[0];
 
-      - name: Get latest metacubexd version
-        id: get_meta_version
+      - name: Update .env file if valid versions exist
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' }}
         run: |
-          LATEST_META=$(curl -sL https://api.github.com/repos/MetaCubeX/metacubexd/releases/latest | jq -r '.tag_name')
-          echo "LATEST_META=$LATEST_META" >> $GITHUB_OUTPUT
-
-      - name: Compare versions
-        id: compare_versions
-        run: |
-          if [[ "${{ steps.get_versions.outputs.MI_CURRENT }}" != "${{ steps.get_mi_version.outputs.LATEST_MI }}" ]]; then
-            echo "MI_UPDATE_NEEDED=true" >> $GITHUB_OUTPUT
-          fi
+          echo "Updating to valid versions:"
+          echo "MI_VERSION=${{ steps.mihomo.outputs.result }}"
+          echo "MetaCubeX_VERSION=${{ steps.metacubexd.outputs.result }}"
           
-          if [[ "${{ steps.get_versions.outputs.META_CURRENT }}" != "${{ steps.get_meta_version.outputs.LATEST_META }}" ]]; then
-            echo "META_UPDATE_NEEDED=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Update .env file
-        if: steps.compare_versions.outputs.MI_UPDATE_NEEDED == 'true' || steps.compare_versions.outputs.META_UPDATE_NEEDED == 'true'
-        run: |
-          if [[ "${{ steps.compare_versions.outputs.MI_UPDATE_NEEDED }}" == 'true' ]]; then
-            sed -i "s/^MI_VERSION=.*/MI_VERSION=${{ steps.get_mi_version.outputs.LATEST_MI }}/" .env
-          fi
-          
-          if [[ "${{ steps.compare_versions.outputs.META_UPDATE_NEEDED }}" == 'true' ]]; then
-            sed -i "s/^MetaCubeX_VERSION=.*/MetaCubeX_VERSION=${{ steps.get_meta_version.outputs.LATEST_META }}/" .env
-          fi
-          
-          echo "Updated .env:"
-          cat .env
+          # 更新 .env 文件
+          echo "MI_VERSION=${{ steps.mihomo.outputs.result }}" > .env
+          echo "MetaCubeX_VERSION=${{ steps.metacubexd.outputs.result }}" >> .env
 
       - name: Commit changes
-        if: steps.compare_versions.outputs.MI_UPDATE_NEEDED == 'true' || steps.compare_versions.outputs.META_UPDATE_NEEDED == 'true'
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' }}
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .env
-          git commit -m "chore: Auto update versions"
+          git commit -m "chore: update versions to mihomo ${{ steps.mihomo.outputs.result }} and metacubexd ${{ steps.metacubexd.outputs.result }}"
           git push
+
+      - name: Skip update if no valid versions
+        if: ${{ steps.mihomo.outputs.result == '' || steps.metacubexd.outputs.result == '' }}
+        run: |
+          echo "Skipping update:"
+          echo "Mihomo valid version: ${{ steps.mihomo.outputs.result || 'none' }}"
+          echo "MetaCubeXD valid version: ${{ steps.metacubexd.outputs.result || 'none' }}"
