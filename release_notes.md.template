@@ -65,5 +65,10 @@ networks:
     driver: bridge
 ```
 
+>
 > 仓库地址：https://github.com/daitcl/mihomo
+>
 > 作者：daitcl
+>
+> 项目源码：[mihomo](https://github.com/MetaCubeX/mihomo) | [Metacubexd](https://github.com/MetaCubeX/metacubexd)
+>
