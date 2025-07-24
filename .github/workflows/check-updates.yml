@@ -64,8 +64,8 @@ jobs:
         id: check_versions
         run: |
           # 读取当前 .env 中的版本
-          CURRENT_MI=$(grep -E '^MI_VERSION=' .env | cut -d'=' -f2)
-          CURRENT_META=$(grep -E '^MetaCubeX_VERSION=' .env | cut -d'=' -f2)
+          CURRENT_MI=$(grep -E '^MI_VERSION=' .env | cut -d'=' -f2 || echo '')
+          CURRENT_META=$(grep -E '^MetaCubeX_VERSION=' .env | cut -d'=' -f2 || echo '')
           
           echo "Current versions in .env:"
           echo "MI_VERSION=$CURRENT_MI"
@@ -75,18 +75,18 @@ jobs:
           echo "MI_VERSION=${{ steps.mihomo.outputs.result }}"
           echo "MetaCubeX_VERSION=${{ steps.metacubexd.outputs.result }}"
           
-          # 设置输出变量
+          # 设置输出变量 (使用新的环境文件方法)
           if [ "$CURRENT_MI" = "${{ steps.mihomo.outputs.result }}" ] && \
              [ "$CURRENT_META" = "${{ steps.metacubexd.outputs.result }}" ]; then
-            echo "::set-output name=needs_update::false"
+            echo "needs_update=false" >> $GITHUB_OUTPUT
             echo "Versions unchanged. No update needed."
           else
-            echo "::set-output name=needs_update::true"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
             echo "New versions detected. Update required."
           fi
 
       - name: Update .env file
-        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' }}
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && needs.fromJson(steps.check_versions.outputs.needs_update) }}
         run: |
           echo "Updating .env with new versions:"
           echo "MI_VERSION=${{ steps.mihomo.outputs.result }}" > .env
@@ -96,7 +96,7 @@ jobs:
           cat .env
 
       - name: Commit and push changes
-        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' }}
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && needs.fromJson(steps.check_versions.outputs.needs_update) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -105,20 +105,23 @@ jobs:
           
           # 尝试推送，如果失败则重试（处理并发更新冲突）
           n=0
-          until [ "$n" -ge 3 ]
+          max_retries=3
+          delay=5
+          until [ $n -ge $max_retries ]
           do
             git pull --rebase && git push && break
             n=$((n+1))
-            echo "Push attempt $n failed, retrying in 5s..."
-            sleep 5
+            echo "Push attempt $n failed, retrying in ${delay}s..."
+            sleep $delay
           done
           
-          if [ "$n" -eq 3 ]; then
-            echo "::warning::Failed to push changes after 3 attempts"
+          if [ $n -eq $max_retries ]; then
+            echo "::warning::Failed to push changes after $max_retries attempts"
+            exit 1
           fi
 
       - name: Skip update if versions unchanged
-        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'false' }}
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && !needs.fromJson(steps.check_versions.outputs.needs_update) }}
         run: |
           echo "Skipping update:"
           echo "Current versions already match latest releases"
