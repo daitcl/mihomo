@@ -75,7 +75,7 @@ jobs:
           echo "MI_VERSION=${{ steps.mihomo.outputs.result }}"
           echo "MetaCubeX_VERSION=${{ steps.metacubexd.outputs.result }}"
           
-          # 设置输出变量 (使用新的环境文件方法)
+          # 设置输出变量
           if [ "$CURRENT_MI" = "${{ steps.mihomo.outputs.result }}" ] && \
              [ "$CURRENT_META" = "${{ steps.metacubexd.outputs.result }}" ]; then
             echo "needs_update=false" >> $GITHUB_OUTPUT
@@ -86,7 +86,7 @@ jobs:
           fi
 
       - name: Update .env file
-        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && needs.fromJson(steps.check_versions.outputs.needs_update) }}
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' }}
         run: |
           echo "Updating .env with new versions:"
           echo "MI_VERSION=${{ steps.mihomo.outputs.result }}" > .env
@@ -96,7 +96,7 @@ jobs:
           cat .env
 
       - name: Commit and push changes
-        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && needs.fromJson(steps.check_versions.outputs.needs_update) }}
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -121,7 +121,7 @@ jobs:
           fi
 
       - name: Skip update if versions unchanged
-        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && !needs.fromJson(steps.check_versions.outputs.needs_update) }}
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'false' }}
         run: |
           echo "Skipping update:"
           echo "Current versions already match latest releases"
