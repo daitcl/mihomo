@@ -8,9 +8,8 @@ on:
       - start.sh
       - Caddyfile
       - config.yaml.template
-      - .github/workflows/*.yml
+      - .github/workflows/docker-build.yml
       - .env
-      - release_notes.md.template
   workflow_dispatch:
 
 env:
