@@ -119,6 +119,28 @@ jobs:
             echo "::warning::Failed to push changes after $max_retries attempts"
             exit 1
           fi
+          
+          # 设置输出标记，表示已提交更改
+          echo "changes_committed=true" >> $GITHUB_OUTPUT
+
+      # 新增步骤：触发 Docker Build 工作流
+      - name: Trigger Docker Build workflow
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' && steps.commit.outputs.changes_committed == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'docker-build.yml',
+                ref: 'main',
+              });
+              console.log('Docker Build workflow triggered successfully.');
+            } catch (error) {
+              console.error('Failed to trigger Docker Build workflow:', error);
+              // 不标记为失败，因为主要工作已完成
+            }
 
       - name: Skip update if versions unchanged
         if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'false' }}
