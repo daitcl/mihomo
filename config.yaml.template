@@ -66,6 +66,10 @@ dns:
     "geosite:geolocation-!cn":
       - "https://dns.cloudflare.com/dns-query"
       - "https://dns.google/dns-query"
+    # 添加 Telegram 特定的 DNS 策略
+    "geosite:telegram":
+      - "https://dns.cloudflare.com/dns-query"
+      - "https://dns.google/dns-query"
 
 # 代理分组
 proxy-groups:
@@ -79,8 +83,13 @@ proxy-groups:
     proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
 
   - name: Telegram
-    type: select
-    proxies: [自动选择, 香港, 台湾, 日本, 新加坡, 美国, 其它地区, 全部节点, 直连]
+    type: url-test
+    url: "https://www.google.com/generate_204"
+    interval: 300
+    tolerance: 50
+    include-all: true
+    filter: "(?i)(港|hk|hongkong|hong kong|台|tw|taiwan|日|jp|japan|美|us|unitedstates|united states|新|sg|singapore)"
+    exclude-filter: "(?i)回国|安徽|北京|重庆|福建|甘肃|广东|广西|贵州|海南|河北|黑龙江|河南|湖北|湖南|吉林|江苏|江西|辽宁|内蒙古|宁夏|青海|山东|山西|陕西|上海|四川|天津|西藏|新疆|云南|浙江|官网|国内|国际|移动|联通|电信|cn|china"
 
   - name: Twitter
     type: select
@@ -196,9 +205,15 @@ rules:
   - GEOSITE,bahamut,巴哈姆特
   - GEOSITE,spotify,Spotify
   
-  # 特殊规则
-  - GEOSITE,category-scholar-!cn,默认
-  - GEOSITE,geolocation-!cn,其他
+  # 添加 Telegram 相关的 IP 段规则
+  - IP-CIDR,91.108.4.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.8.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.12.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.16.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.20.0/22,Telegram,no-resolve
+  - IP-CIDR,91.108.56.0/22,Telegram,no-resolve
+  - IP-CIDR,149.154.160.0/20,Telegram,no-resolve
+  - IP-CIDR,185.76.151.0/24,Telegram,no-resolve
   
   # IP规则
   - GEOIP,private,直连,no-resolve
@@ -208,6 +223,10 @@ rules:
   - GEOIP,netflix,NETFLIX,no-resolve
   - GEOIP,CN,直连,no-resolve
   - GEOIP,JP,其他,no-resolve
+  
+  # 特殊规则
+  - GEOSITE,category-scholar-!cn,默认
+  - GEOSITE,geolocation-!cn,其他
   
   # 端口规则
   - DST-PORT,80/8080/443/8443,其他
