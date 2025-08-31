@@ -1,4 +1,20 @@
-# mihomo 镜像
+<h3><div align="center">mihomo 镜像</div>
+
+---
+
+<div align="center">
+  <img src="https://img.shields.io/github/last-commit/daitcl/mihomo" alt="最后提交">
+  <img src="https://img.shields.io/github/actions/workflow/status/daitcl/mihomo/docker-build.yml" alt="构建状态">
+  <a href="https://github.com/daitcl/mihomo/blob/main/License">
+    <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="MIT许可证">
+  </a>
+ <a href="https://hub.docker.com/r/daitcl/mihomo">
+   <img src="https://img.shields.io/docker/pulls/daitcl/mihomo" alt="Docker Hub Pulls">
+ </a>
+  <a href="https://github.com/daitcl/mihomo/pkgs/container/mihomo">
+    <img src="https://img.shields.io/badge/GHCR.io-Package-blue?logo=github" alt="GHCR Package">
+  </a>
+</div>
 
 mihomo 是一个基于 Clash 核心的代理工具镜像，集成了 Metacubexd 管理面板，提供强大的代理功能和直观的 Web 管理界面。
 
