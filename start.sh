@@ -2,8 +2,12 @@
 set -e
 
 # 从模板生成配置文件
-envsubst '${LOG_LEVEL} ${CLASH_SECRET} ${SUBSCRIBE_NAME} ${SUBSCRIBE_URL}' < /app/config.yaml.template > /root/.config/mihomo/config.yaml
-
+if [ ! -f "/root/.config/mihomo/config.yaml" ]; then
+    echo "生成配置文件..."
+    envsubst '${LOG_LEVEL} ${CLASH_SECRET} ${SUBSCRIBE_NAME} ${SUBSCRIBE_URL}' < /app/config.yaml.template > /root/.config/mihomo/config.yaml
+else
+    echo "/root/.config/mihomo/config.yaml 已存在，跳过生成"
+fi
 # 地理数据检查函数
 geodata_check() {
   local url=$1
@@ -65,8 +69,3 @@ caddy run --config ./Caddyfile &
 # 监控进程状态
 wait -n
 exit $?
-
-# 地理数据自动下载功能说明：
-# 1. 自动检测并下载缺失的geo数据文件
-# 2. 包含3次指数退避重试机制
-# 3. 与Dockerfile预下载步骤完全兼容
