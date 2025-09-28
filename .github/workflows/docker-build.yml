@@ -19,6 +19,12 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # 方案二：添加权限配置
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+      
     steps:
       # 步骤1：检出代码
       - name: Checkout repository
@@ -85,14 +91,7 @@ jobs:
           echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
           echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
 
-      # 步骤5：设置Docker Buildx（修复缓存问题）
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker-container
-          install: true
-
-      # 步骤6：登录容器注册表
+      # 步骤5：登录容器注册表（提前登录，以便后续步骤使用认证）
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -106,7 +105,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤7：构建并推送镜像（修复缓存配置）
+      # 步骤6：预先拉取构建器镜像（方案一）
+      - name: Pre-pull buildx buildkit image
+        run: |
+          echo "Pulling buildkit image to ensure authentication..."
+          docker pull moby/buildkit:buildx-stable-1
+          echo "Buildkit image pulled successfully"
+
+      # 步骤7：设置Docker Buildx（方案一修复）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          driver-opt: |
+            image=moby/buildkit:buildx-stable-1
+          buildkitd-flags: --allow-insecure-entitlement network.host
+          install: true
+
+      # 步骤8：构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -127,7 +143,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 步骤8：更新Docker Hub描述
+      # 步骤9：更新Docker Hub描述
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4
         with:
@@ -136,7 +152,7 @@ jobs:
           repository: ${{ env.DOCKERHUB_IMAGE_NAME }}
           readme-filepath: ./release_notes.md
 
-      # 步骤9：显示构建信息
+      # 步骤10：显示构建信息
       - name: Show build information
         run: |
           echo "=== Build Summary ==="
