@@ -1,11 +1,93 @@
 :8080 {
-  file_server
+  # 启用压缩
+  encode gzip zstd
+
+  # 安全头
+  header {
+    # 基础安全头
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy strict-origin-when-cross-origin
+    
+    # CSP 内容安全策略
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' ws: wss:;"
+    
+    # 其他安全头
+    Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    X-Permitted-Cross-Domain-Policies "none"
+    Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    
+    # 移除敏感信息
+    -Server
+  }
+
+  # 文件服务器配置
+  file_server {
+    precompressed gzip zstd
+  }
   
   root * .
-  
+
+  # SPA 路由支持
   try_files {path} /index.html
+
+  # 日志格式
+  log {
+    output stdout
+    format console
+    level INFO
+  }
+
+  # 错误页面处理
+  handle_errors {
+    @404 {
+      expression {http.error.status_code} == 404
+    }
+    rewrite @404 /index.html
+    file_server
+  }
 }
 
 :8080/api* {
-  reverse_proxy localhost:9090
+  # API 反向代理
+  reverse_proxy localhost:9090 {
+    # 保持主机头
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+    
+    # 超时设置
+    flush_interval -1
+    transport http {
+      dial_timeout 10s
+      response_header_timeout 30s
+    }
+  }
+
+  # API 特定头
+  header {
+    Access-Control-Allow-Origin "*"
+    Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Key"
+    Access-Control-Allow-Credentials "true"
+  }
+}
+
+# 全局配置
+{
+  # 管理接口（可选）
+  admin off
+  
+  # 自动 HTTPS 配置（如果启用域名）
+  # auto_https disable_redirects
+  
+  # 日志配置
+  log {
+    level INFO
+  }
+  
+  # 持久化配置（生产环境）
+  # persist_config
 }
