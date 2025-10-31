@@ -19,7 +19,6 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # 方案二：添加权限配置
     permissions:
       contents: read
       packages: write
@@ -36,6 +35,8 @@ jobs:
       - name: Load and validate environment variables
         id: set-versions
         run: |
+          set -e
+          
           # 确保.env文件存在
           if [ ! -f .env ]; then
             echo "::error::.env file not found!"
@@ -48,50 +49,99 @@ jobs:
           # 安全加载变量并验证必需字段
           required_vars=("MI_VERSION" "MetaCubeX_VERSION")
           for var in "${required_vars[@]}"; do
-            value=$(grep -E "^${var}=" .env | cut -d '=' -f2-)
+            value=$(grep -E "^${var}=" .env | cut -d '=' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [ -z "$value" ]; then
               echo "::error::Missing or empty required variable: $var in .env file"
               exit 1
             fi
             echo "${var}=${value}" >> $GITHUB_ENV
-            echo "Set ${var}=${value}"
+            echo "✓ Set ${var}=${value}"
           done
           
           # 设置镜像完整名称
           echo "IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
-          echo "Set IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+          echo "✓ Set IMAGE_FULL_NAME=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
 
-      # 步骤3：验证MetaCubeX版本
-      - name: Verify MetaCubeX version
+      # 步骤3：验证版本可用性
+      - name: Verify versions
         run: |
-          version="${{ env.MetaCubeX_VERSION }}"
-          echo "Verifying MetaCubeX version: $version"
+          set -e
+          echo "=== Version Verification ==="
           
-          # 使用API直接检查版本存在性
-          api_url="https://api.github.com/repos/MetaCubeX/metacubexd/tags"
-          response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$api_url")
-          
-          if ! echo "$response" | jq -e --arg version "$version" 'any(.[]; .name == $version)' > /dev/null; then
-            echo "::error::MetaCubeX version $version does not exist!"
-            echo "Last 5 available versions:"
-            echo "$response" | jq -r '.[].name' | head -5
+          # 验证 MetaCubeX 版本
+          metacubexd_version="${{ env.MetaCubeX_VERSION }}"
+          echo "Verifying MetaCubeX version: $metacubexd_version"
+          metacubexd_url="https://api.github.com/repos/MetaCubeX/metacubexd/tags"
+          if ! curl -s -H "Accept: application/vnd.github.v3+json" "$metacubexd_url" | jq -e --arg version "$metacubexd_version" 'any(.[]; .name == $version)' > /dev/null; then
+            echo "::error::MetaCubeX version $metacubexd_version does not exist!"
             exit 1
           fi
+          echo "✓ MetaCubeX version $metacubexd_version is valid"
           
-          echo "Version $version is valid"
+          # 验证 MI 版本
+          mi_version="${{ env.MI_VERSION }}"
+          echo "Verifying MI version: $mi_version"
+          mi_releases_url="https://api.github.com/repos/MetaCubeX/mihomo/releases"
+          if ! curl -s -H "Accept: application/vnd.github.v3+json" "$mi_releases_url" | jq -e --arg version "$mi_version" 'any(.[]; .tag_name == $version)' > /dev/null; then
+            echo "::error::MI version $mi_version does not exist!"
+            exit 1
+          fi
+          echo "✓ MI version $mi_version is valid"
+          
+          # 验证 MI 二进制文件是否存在
+          mi_binary_url="https://github.com/MetaCubeX/mihomo/releases/download/${mi_version}/mihomo-linux-amd64-compatible-${mi_version}.gz"
+          if ! curl -f -I -s -o /dev/null "$mi_binary_url"; then
+            echo "::error::MI binary not found at: $mi_binary_url"
+            exit 1
+          fi
+          echo "✓ MI binary is available"
 
       # 步骤4：生成发布说明
       - name: Generate release notes
         run: |
-          sed -e "s/{{MI_VERSION}}/${{ env.MI_VERSION }}/g" \
-              -e "s/{{MetaCubeX_VERSION}}/${{ env.MetaCubeX_VERSION }}/g" \
-              release_notes.md.template > release_notes.md
-          
-          echo -e "\n### 镜像URL" >> release_notes.md
-          echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
-          echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
+          cat > release_notes.md << EOF
+# Mihomo with Metacubexd Dashboard
 
-      # 步骤5：登录容器注册表（提前登录，以便后续步骤使用认证）
+## Component Versions
+- **Mihomo Core:** ${{ env.MI_VERSION }}
+- **Metacubexd Dashboard:** ${{ env.MetaCubeX_VERSION }}
+
+## Image Locations
+- **GitHub Container Registry:** 
+  \`\`\`
+  ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.MI_VERSION }}
+  \`\`\`
+- **Docker Hub:** 
+  \`\`\`
+  ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}
+  \`\`\`
+
+## Usage
+\`\`\`bash
+# Quick start
+docker run -d \\
+  -p 8080:8080 \\    # Web Dashboard
+  -p 7890:7890 \\    # Proxy Port
+  -p 9090:9090 \\    # API Port
+  ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}
+\`\`\`
+
+## Configuration
+1. The container will create a default configuration on first run
+2. Access the dashboard at: http://localhost:8080
+3. Default proxy port: 7890
+
+## Ports
+- \`8080\`: Web Dashboard (Caddy)
+- \`7890\`: Proxy Port
+- \`7891-7894\`: Additional proxy ports
+- \`9090\`: Control API
+
+## Health Check
+The container includes health checks and will automatically restart if services become unhealthy.
+EOF
+
+      # 步骤5：登录容器注册表
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -105,28 +155,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤6：预先拉取构建器镜像（方案一）
-      - name: Pre-pull buildx buildkit image
-        run: |
-          echo "Pulling buildkit image to ensure authentication..."
-          docker pull moby/buildkit:buildx-stable-1
-          echo "Buildkit image pulled successfully"
-
-      # 步骤7：设置Docker Buildx（方案一修复）
+      # 步骤6：设置 Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        id: buildx
         with:
           driver: docker-container
-          driver-opt: |
+          driver-opts: |
             image=moby/buildkit:buildx-stable-1
           buildkitd-flags: --allow-insecure-entitlement network.host
-          install: true
 
-      # 步骤8：构建并推送镜像
+      # 步骤7：构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}
@@ -139,11 +183,16 @@ jobs:
           platforms: linux/amd64
           labels: |
             org.opencontainers.image.version=${{ env.MI_VERSION }}
-            org.opencontainers.image.description=Clash core with Metacubexd dashboard
+            org.opencontainers.image.description=Mihomo proxy core with Metacubexd dashboard
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.created=${{ fromJSON(steps.buildx.outputs.metadata).buildx.build-start }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
+          no-cache: false
 
-      # 步骤9：更新Docker Hub描述
+      # 步骤8：更新 Docker Hub 描述
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4
         with:
@@ -152,18 +201,18 @@ jobs:
           repository: ${{ env.DOCKERHUB_IMAGE_NAME }}
           readme-filepath: ./release_notes.md
 
-      # 步骤10：显示构建信息
-      - name: Show build information
+      # 步骤9：显示构建摘要
+      - name: Show build summary
         run: |
-          echo "=== Build Summary ==="
-          echo "Image Version: ${{ env.MI_VERSION }}"
-          echo "Metacubexd Version: ${{ env.MetaCubeX_VERSION }}"
+          echo "=== 🎉 Build Successful ==="
           echo ""
-          echo "GitHub Container Registry:"
-          echo "https://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/pkgs/container/${{ env.IMAGE_NAME }}"
+          echo "📦 Image Details:"
+          echo "  - Version: ${{ env.MI_VERSION }}"
+          echo "  - Metacubexd: ${{ env.MetaCubeX_VERSION }}"
           echo ""
-          echo "Docker Hub Registry:"
-          echo "https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
+          echo "📍 Registry URLs:"
+          echo "  - GHCR: https://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/pkgs/container/${{ env.IMAGE_NAME }}"
+          echo "  - Docker Hub: https://hub.docker.com/r/${{ env.DOCKERHUB_IMAGE_NAME }}"
           echo ""
-          echo "Release Notes Preview:"
-          head -n 10 release_notes.md
+          echo "🚀 Quick Start:"
+          echo "  docker run -d -p 8080:8080 -p 7890:7890 ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}"
