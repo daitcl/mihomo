@@ -99,47 +99,13 @@ jobs:
       # 步骤4：生成发布说明
       - name: Generate release notes
         run: |
-          cat > release_notes.md << EOF
-# Mihomo with Metacubexd Dashboard
-
-## Component Versions
-- **Mihomo Core:** ${{ env.MI_VERSION }}
-- **Metacubexd Dashboard:** ${{ env.MetaCubeX_VERSION }}
-
-## Image Locations
-- **GitHub Container Registry:** 
-  \`\`\`
-  ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.MI_VERSION }}
-  \`\`\`
-- **Docker Hub:** 
-  \`\`\`
-  ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}
-  \`\`\`
-
-## Usage
-\`\`\`bash
-# Quick start
-docker run -d \\
-  -p 8080:8080 \\    # Web Dashboard
-  -p 7890:7890 \\    # Proxy Port
-  -p 9090:9090 \\    # API Port
-  ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}
-\`\`\`
-
-## Configuration
-1. The container will create a default configuration on first run
-2. Access the dashboard at: http://localhost:8080
-3. Default proxy port: 7890
-
-## Ports
-- \`8080\`: Web Dashboard (Caddy)
-- \`7890\`: Proxy Port
-- \`7891-7894\`: Additional proxy ports
-- \`9090\`: Control API
-
-## Health Check
-The container includes health checks and will automatically restart if services become unhealthy.
-EOF
+          sed -e "s/{{MI_VERSION}}/${{ env.MI_VERSION }}/g" \
+              -e "s/{{MetaCubeX_VERSION}}/${{ env.MetaCubeX_VERSION }}/g" \
+              release_notes.md.template > release_notes.md
+          
+          echo -e "\n### 镜像URL" >> release_notes.md
+          echo "- **GitHub Container Registry:** \`${{ env.IMAGE_FULL_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
+          echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:${{ env.MI_VERSION }}\`" >> release_notes.md
 
       # 步骤5：登录容器注册表
       - name: Login to GitHub Container Registry
