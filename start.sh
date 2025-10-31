@@ -3,6 +3,12 @@ set -e
 
 echo "=== 启动 Mihomo 代理服务 ==="
 
+# 版本信息
+echo "📋 版本信息:"
+echo "  - Mihomo: ${MI_VERSION:-未知}"
+echo "  - Metacubexd: ${MetaCubeX_VERSION:-未知}"
+echo "  - 启动时间: $(date '+%Y-%m-%d %H:%M:%S')"
+
 # 配置路径
 CONFIG_DIR="/root/.config/mihomo"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
@@ -16,6 +22,14 @@ if [ ! -f "$CONFIG_FILE" ]; then
     echo "📝 生成配置文件..."
     envsubst '${LOG_LEVEL} ${CLASH_SECRET} ${SUBSCRIBE_NAME} ${SUBSCRIBE_URL}' < "$TEMPLATE_FILE" > "$CONFIG_FILE"
     echo "✅ 配置文件已生成: $CONFIG_FILE"
+    
+    # 验证生成的配置文件
+    if [ -s "$CONFIG_FILE" ]; then
+        echo "✅ 配置文件验证成功 ($(stat -c%s "$CONFIG_FILE") 字节)"
+    else
+        echo "❌ 错误: 生成的配置文件为空"
+        exit 1
+    fi
 else
     echo "📁 配置文件已存在，跳过生成: $CONFIG_FILE"
 fi
@@ -29,22 +43,31 @@ geodata_check() {
     local delay=2
 
     if [ -f "$path" ]; then
-        echo "✅ $path 已存在，跳过下载"
-        return 0
+        local file_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
+        if [ "$file_size" -gt 1024 ]; then
+            echo "✅ $(basename "$path") 已存在 ($(numfmt --to=iec "$file_size"))"
+            return 0
+        else
+            echo "⚠️  $(basename "$path") 文件过小，重新下载..."
+            rm -f "$path"
+        fi
     fi
 
     echo "📥 正在下载地理数据: $(basename "$path")"
 
     while [ $attempt -le $retries ]; do
         echo "   尝试 $attempt/$retries: $url"
-        if curl -fL --connect-timeout 30 --retry 2 "$url" -o "$path"; then
+        if curl -fL --connect-timeout 30 --retry 2 --retry-delay 1 "$url" -o "$path"; then
             if [ -s "$path" ]; then
-                echo "✅ 下载完成: $path ($(stat -c%s "$path") 字节)"
+                local downloaded_size=$(stat -c%s "$path")
+                echo "✅ 下载完成: $path ($(numfmt --to=iec "$downloaded_size"))"
                 return 0
             else
                 echo "⚠️  文件为空，删除并重试..."
                 rm -f "$path"
             fi
+        else
+            echo "❌ 下载失败 (尝试 $attempt/$retries)"
         fi
 
         if [ $attempt -lt $retries ]; then
@@ -81,14 +104,16 @@ optional_geodata_check() {
     
     if [ ! -f "$path" ]; then
         echo "📥 下载可选地理数据: $(basename "$path")"
-        if curl -fL --connect-timeout 20 "$url" -o "$path" 2>/dev/null && [ -s "$path" ]; then
-            echo "✅ 下载完成: $path"
+        if curl -fL --connect-timeout 20 --retry 2 "$url" -o "$path" 2>/dev/null && [ -s "$path" ]; then
+            local file_size=$(stat -c%s "$path")
+            echo "✅ 下载完成: $path ($(numfmt --to=iec "$file_size"))"
         else
             echo "⚠️  跳过可选文件: $(basename "$path")"
             rm -f "$path"
         fi
     else
-        echo "✅ $(basename "$path") 已存在"
+        local file_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
+        echo "✅ $(basename "$path") 已存在 ($(numfmt --to=iec "$file_size"))"
     fi
 }
 
@@ -135,6 +160,8 @@ for geo_file in "${core_geo_files[@]}"; do
     fi
 done
 
+echo "✅ 所有必要文件验证通过"
+
 # 切换到工作目录
 cd /srv
 
@@ -143,24 +170,55 @@ echo "🚀 启动服务..."
 
 # 启动 Caddy web server
 echo "🌐 启动 Caddy web 服务器..."
-echo "Caddy 配置:"
+echo "📄 Caddy 配置内容:"
 cat ./Caddyfile
+echo ""
+
+# 验证 Caddyfile 语法
+if caddy validate --config ./Caddyfile --adapter caddyfile; then
+    echo "✅ Caddyfile 语法验证通过"
+else
+    echo "❌ Caddyfile 语法错误"
+    exit 1
+fi
+
+# 后台启动 Caddy
 caddy run --config ./Caddyfile --adapter caddyfile &
 
 # 等待 Caddy 启动
 echo "⏳ 等待 Caddy 启动..."
-sleep 3
+sleep 5
 
 # 检查 Caddy 是否正常运行
 if curl -s -f http://localhost:8080 > /dev/null 2>&1; then
     echo "✅ Caddy 已成功启动在端口 8080"
 else
-    echo "⚠️  Caddy 启动检查失败，但继续启动进程..."
+    echo "❌ Caddy 启动失败，检查日志..."
+    exit 1
 fi
 
 # 启动 Mihomo 核心
 echo "🔧 启动 Mihomo 核心..."
-echo "Mihomo 版本: $(mihomo -v | head -1)"
+echo "📋 Mihomo 版本信息:"
+mihomo -v || echo "⚠️  无法获取 Mihomo 版本信息"
+
+# 验证配置文件语法
+if mihomo -d "$CONFIG_DIR" -t; then
+    echo "✅ Mihomo 配置文件验证通过"
+else
+    echo "❌ Mihomo 配置文件验证失败"
+    exit 1
+fi
+
+echo ""
+echo "🎉 所有服务启动完成!"
+echo "📊 服务状态:"
+echo "  - Caddy Web UI: http://localhost:8080"
+echo "  - Mihomo API: http://localhost:9090"
+echo "  - 代理端口: 7890 (HTTP), 7891 (SOCKS5), 7892 (混合)"
+echo ""
+echo "📝 日志查看: docker logs <container_name>"
+echo "🛑 停止服务: docker stop <container_name>"
 
 # 在前台启动 mihomo（主进程）
 exec mihomo -d "$CONFIG_DIR"
