@@ -161,8 +161,6 @@ EOF
         id: buildx
         with:
           driver: docker-container
-          driver-opts: |
-            image=moby/buildkit:buildx-stable-1
           buildkitd-flags: --allow-insecure-entitlement network.host
 
       # 步骤7：构建并推送镜像
@@ -186,7 +184,6 @@ EOF
             org.opencontainers.image.description=Mihomo proxy core with Metacubexd dashboard
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.created=${{ fromJSON(steps.buildx.outputs.metadata).buildx.build-start }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
