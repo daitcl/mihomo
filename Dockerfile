@@ -1,16 +1,26 @@
-FROM docker.io/node:alpine AS ui-builder 
 # 阶段1：构建 Metacubexd 前端
+FROM docker.io/node:20-alpine AS ui-builder
+
 ARG MetaCubeX_VERSION
 
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
 ENV HUSKY=0
+ENV NODE_OPTIONS="--max_old_space_size=4096"
 WORKDIR /build
 
-# 克隆指定版本仓库并安装构建依赖
-RUN apk add --no-cache git gettext \
-    && git clone -b ${MetaCubeX_VERSION} https://github.com/MetaCubeX/metacubexd.git . \
+# 安装系统依赖
+RUN apk update && apk add --no-cache \
+    git \
+    curl \
     && corepack enable \
-    && corepack prepare pnpm@latest --activate \
-    && pnpm install \
+    && corepack prepare pnpm@latest --activate
+
+# 克隆指定版本的 metacubexd
+RUN git clone -b ${MetaCubeX_VERSION} --depth 1 https://github.com/MetaCubeX/metacubexd.git .
+
+# 安装依赖并构建
+RUN pnpm install --frozen-lockfile \
     && pnpm build
 
 # 阶段2：构建最终镜像
@@ -18,10 +28,14 @@ FROM docker.io/caddy:alpine
 
 ARG MI_VERSION
 
-# 安装依赖并配置运行环境
-RUN apk add --no-cache libcap curl gettext
+# 安装运行依赖
+RUN apk update && apk add --no-cache \
+    libcap \
+    curl \
+    bash \
+    && rm -rf /var/cache/apk/*
 
-# 下载并配置mihomo二进制文件
+# 下载并配置 mihomo 二进制文件
 RUN mkdir -p /root/.config/mihomo \
     && curl -fL "https://github.com/MetaCubeX/mihomo/releases/download/${MI_VERSION}/mihomo-linux-amd64-compatible-${MI_VERSION}.gz" -o /tmp/mihomo.gz \
     && gunzip /tmp/mihomo.gz \
@@ -31,28 +45,29 @@ RUN mkdir -p /root/.config/mihomo \
 
 # 下载地理数据文件
 RUN curl -fL "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat" -o /root/.config/mihomo/GeoSite.dat \
-    && curl -fL "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat" -o /root/.config/mihomo/GeoIP.dat \
-    && curl -fL "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb" -o /root/.config/mihomo/Country.mmdb \
-    && curl -fL "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb" -o /root/.config/mihomo/GeoASN.dat
+    && curl -fL "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat" -o /root/.config/mihomo/GeoIP.dat \
+    && curl -fL "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb" -o /root/.config/mihomo/Country.mmdb
 
 # 复制 Metacubexd 构建产物
 WORKDIR /srv
-COPY --from=ui-builder /build/dist/. .
+COPY --from=ui-builder /build/dist .
 
 # 复制并格式化 Caddyfile
 COPY Caddyfile .
-RUN caddy fmt --overwrite
+RUN caddy fmt --overwrite /srv/Caddyfile
 
-# 复制配置文件模板
+# 复制配置文件模板和启动脚本
 RUN mkdir -p /app
 COPY config.yaml.template /app/config.yaml.template
-
-# 添加启动脚本
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
 # 暴露端口
 EXPOSE 8080 7890 7891 7892 7893 7894 9090
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/ || exit 1
 
 # 使用自定义启动脚本
 CMD ["/start.sh"]
