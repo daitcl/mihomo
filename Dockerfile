@@ -33,7 +33,13 @@ RUN pnpm install --frozen-lockfile --ignore-scripts && \
 # 阶段2：构建最终镜像
 FROM docker.io/caddy:alpine
 
+# 定义构建参数
 ARG MI_VERSION
+ARG MetaCubeX_VERSION
+
+# 设置环境变量（在运行时可用）
+ENV MI_VERSION=${MI_VERSION}
+ENV MetaCubeX_VERSION=${MetaCubeX_VERSION}
 
 # 安装运行依赖（添加 coreutils 包含 numfmt）
 RUN apk update && apk add --no-cache \
