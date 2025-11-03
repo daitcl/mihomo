@@ -1,3 +1,20 @@
+# 全局配置 - 必须放在文件最开头[citation:2][citation:5]
+{
+  # 管理接口（可选）
+  admin off
+  
+  # 自动 HTTPS 配置（如果启用域名）
+  # auto_https disable_redirects
+  
+  # 日志配置
+  log {
+    level INFO
+  }
+  
+  # 持久化配置（生产环境）
+  # persist_config
+}
+
 :8080 {
   # 启用压缩
   encode gzip zstd
@@ -55,9 +72,7 @@
     # 保持主机头
     header_up Host {host}
     header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
-    header_up X-Forwarded-Proto {scheme}
-    
+    # 注意：移除了重复的 X-Forwarded-For 和 X-Forwarded-Proto，因为 Caddy 默认会添加
     # 超时设置
     flush_interval -1
     transport http {
@@ -73,21 +88,4 @@
     Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Key"
     Access-Control-Allow-Credentials "true"
   }
-}
-
-# 全局配置
-{
-  # 管理接口（可选）
-  admin off
-  
-  # 自动 HTTPS 配置（如果启用域名）
-  # auto_https disable_redirects
-  
-  # 日志配置
-  log {
-    level INFO
-  }
-  
-  # 持久化配置（生产环境）
-  # persist_config
 }
