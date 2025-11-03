@@ -73,14 +73,6 @@ RUN chmod +x /start.sh
 # 清理缓存以减小镜像大小
 RUN rm -rf /var/cache/apk/* /tmp/* /var/tmp/* ~/.cache
 
-# 创建非root用户（安全增强）
-RUN addgroup -S mihomo && adduser -S mihomo -G mihomo \
-    && chown -R mihomo:mihomo /root/.config/mihomo \
-    && chown -R mihomo:mihomo /srv
-
-# 切换到非root用户
-USER mihomo
-
 # 暴露端口
 EXPOSE 8080 7890 7891 7892 7893 7894 9090
 
