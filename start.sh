@@ -3,9 +3,9 @@ set -e
 
 echo "=== 启动 Mihomo 代理服务 ==="
 
-# 版本信息
+# 版本信息 - 添加回退机制
 echo "📋 版本信息:"
-echo "  - Mihomo: ${MI_VERSION:-未知}"
+echo "  - Mihomo: ${MI_VERSION:-$(mihomo -v 2>/dev/null | head -1 || echo '未知')}"
 echo "  - Metacubexd: ${MetaCubeX_VERSION:-未知}"
 echo "  - 启动时间: $(date '+%Y-%m-%d %H:%M:%S')"
 
