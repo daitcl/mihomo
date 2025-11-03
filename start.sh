@@ -25,7 +25,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
     
     # 验证生成的配置文件
     if [ -s "$CONFIG_FILE" ]; then
-        echo "✅ 配置文件验证成功 ($(stat -c%s "$CONFIG_FILE") 字节)"
+        file_size=$(stat -c%s "$CONFIG_FILE" 2>/dev/null || echo "0")
+        echo "✅ 配置文件验证成功 ($file_size 字节)"
     else
         echo "❌ 错误: 生成的配置文件为空"
         exit 1
@@ -43,9 +44,9 @@ geodata_check() {
     local delay=2
 
     if [ -f "$path" ]; then
-        local file_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
+        file_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
         if [ "$file_size" -gt 1024 ]; then
-            echo "✅ $(basename "$path") 已存在 ($(numfmt --to=iec "$file_size"))"
+            echo "✅ $(basename "$path") 已存在 ($file_size 字节)"
             return 0
         else
             echo "⚠️  $(basename "$path") 文件过小，重新下载..."
@@ -59,8 +60,8 @@ geodata_check() {
         echo "   尝试 $attempt/$retries: $url"
         if curl -fL --connect-timeout 30 --retry 2 --retry-delay 1 "$url" -o "$path"; then
             if [ -s "$path" ]; then
-                local downloaded_size=$(stat -c%s "$path")
-                echo "✅ 下载完成: $path ($(numfmt --to=iec "$downloaded_size"))"
+                downloaded_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
+                echo "✅ 下载完成: $path ($downloaded_size 字节)"
                 return 0
             else
                 echo "⚠️  文件为空，删除并重试..."
@@ -105,15 +106,15 @@ optional_geodata_check() {
     if [ ! -f "$path" ]; then
         echo "📥 下载可选地理数据: $(basename "$path")"
         if curl -fL --connect-timeout 20 --retry 2 "$url" -o "$path" 2>/dev/null && [ -s "$path" ]; then
-            local file_size=$(stat -c%s "$path")
-            echo "✅ 下载完成: $path ($(numfmt --to=iec "$file_size"))"
+            file_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
+            echo "✅ 下载完成: $path ($file_size 字节)"
         else
             echo "⚠️  跳过可选文件: $(basename "$path")"
             rm -f "$path"
         fi
     else
-        local file_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
-        echo "✅ $(basename "$path") 已存在 ($(numfmt --to=iec "$file_size"))"
+        file_size=$(stat -c%s "$path" 2>/dev/null || echo "0")
+        echo "✅ $(basename "$path") 已存在 ($file_size 字节)"
     fi
 }
 
@@ -130,35 +131,35 @@ optional_geodata_check \
     "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb" \
     "$CONFIG_DIR/GeoASN.dat"
 
-# 验证必要文件存在
+# 验证必要文件存在 - 使用兼容的语法
 echo "🔍 验证必要文件..."
-required_files=(
-    "$CONFIG_FILE"
-    "/usr/local/bin/mihomo"
-    "/srv/Caddyfile"
-)
-
-for file in "${required_files[@]}"; do
+check_file() {
+    local file=$1
     if [ ! -f "$file" ]; then
         echo "❌ 错误: 缺少必要文件: $file"
         exit 1
     fi
     echo "✅ 找到: $(basename "$file")"
-done
+}
 
-# 验证地理数据核心文件
-core_geo_files=(
-    "$CONFIG_DIR/GeoSite.dat"
-    "$CONFIG_DIR/GeoIP.dat" 
-    "$CONFIG_DIR/Country.mmdb"
-)
+check_file "$CONFIG_FILE"
+check_file "/usr/local/bin/mihomo"
+check_file "/srv/Caddyfile"
 
-for geo_file in "${core_geo_files[@]}"; do
+# 验证地理数据核心文件 - 使用兼容的语法
+echo "🔍 验证核心地理数据文件..."
+check_geo_file() {
+    local geo_file=$1
     if [ ! -f "$geo_file" ]; then
         echo "❌ 错误: 缺少核心地理数据文件: $(basename "$geo_file")"
         exit 1
     fi
-done
+    echo "✅ 找到: $(basename "$geo_file")"
+}
+
+check_geo_file "$CONFIG_DIR/GeoSite.dat"
+check_geo_file "$CONFIG_DIR/GeoIP.dat"
+check_geo_file "$CONFIG_DIR/Country.mmdb"
 
 echo "✅ 所有必要文件验证通过"
 

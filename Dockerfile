@@ -35,12 +35,13 @@ FROM docker.io/caddy:alpine
 
 ARG MI_VERSION
 
-# 安装运行依赖
+# 安装运行依赖（添加 coreutils 包含 numfmt）
 RUN apk update && apk add --no-cache \
     libcap \
     curl \
     bash \
     gettext \
+    coreutils \
     && rm -rf /var/cache/apk/*
 
 # 下载并配置 mihomo 二进制文件
