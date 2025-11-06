@@ -29,7 +29,7 @@
         -Server
     }
 
-    # 全局错误处理 (移出 handle 块，放在这里)
+    # 全局错误处理
     handle_errors {
         @404 {
             expression {http.error.status_code} == 404
@@ -38,16 +38,15 @@
         file_server
     }
 
-    # API 路由优先处理
+    # API 路由 - 使用路径重写
     handle /api/* {
+        # 重写路径：移除 /api 前缀
+        rewrite * /{path.import}
+        
         reverse_proxy localhost:9090 {
             header_up Host {host}
             header_up X-Real-IP {remote}
             flush_interval -1
-            transport http {
-                dial_timeout 10s
-                response_header_timeout 30s
-            }
         }
 
         # API 特定头
