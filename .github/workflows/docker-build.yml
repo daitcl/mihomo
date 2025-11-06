@@ -9,6 +9,7 @@ on:
       - Caddyfile
       - config.yaml.template
       - .github/workflows/docker-build.yml
+      - .env
   workflow_dispatch:
 
 env:
