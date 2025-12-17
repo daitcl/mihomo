@@ -73,8 +73,12 @@ jobs:
       - name: Generate release notes
         run: |
           sed -e "s/{{MI_VERSION}}/${{ env.MI_VERSION }}/g" \
-              -e "s/{{MetaCubeX_VERSION}}/${{ env.METACUBEXD_VERSION }}/g" \
+              -e "s/{{METACUBEXD_VERSION}}/${{ env.METACUBEXD_VERSION }}/g" \
               release_notes.md.template > release_notes.md
+          
+          # 验证生成的内容
+          echo "Generated release notes preview:"
+          grep -A2 "构建信息" release_notes.md || echo "生成成功"
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4

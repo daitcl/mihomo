@@ -65,15 +65,15 @@ jobs:
         run: |
           # 读取当前 .env 中的版本
           CURRENT_MI=$(grep -E '^MI_VERSION=' .env | cut -d'=' -f2 || echo '')
-          CURRENT_META=$(grep -E '^MetaCubeX_VERSION=' .env | cut -d'=' -f2 || echo '')
+          CURRENT_META=$(grep -E '^METACUBEXD_VERSION=' .env | cut -d'=' -f2 || echo '')
           
           echo "Current versions in .env:"
           echo "MI_VERSION=$CURRENT_MI"
-          echo "MetaCubeX_VERSION=$CURRENT_META"
+          echo "METACUBEXD_VERSION=$CURRENT_META"
           
           echo "Latest versions from GitHub:"
           echo "MI_VERSION=${{ steps.mihomo.outputs.result }}"
-          echo "MetaCubeX_VERSION=${{ steps.metacubexd.outputs.result }}"
+          echo "METACUBEXD_VERSION=${{ steps.metacubexd.outputs.result }}"
           
           # 设置输出变量
           if [ "$CURRENT_MI" = "${{ steps.mihomo.outputs.result }}" ] && \
@@ -90,13 +90,13 @@ jobs:
         run: |
           echo "Updating .env with new versions:"
           echo "MI_VERSION=${{ steps.mihomo.outputs.result }}" > .env
-          echo "MetaCubeX_VERSION=${{ steps.metacubexd.outputs.result }}" >> .env
+          echo "METACUBEXD_VERSION=${{ steps.metacubexd.outputs.result }}" >> .env
           
           # 显示更新后的内容
           cat .env
 
       - name: Commit and push changes
-        id: commit-step  # 添加显式ID
+        id: commit-step
         if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' }}
         run: |
           git config user.name "github-actions[bot]"
@@ -126,7 +126,7 @@ jobs:
 
       # 新增步骤：触发 Docker Build 工作流
       - name: Trigger Docker Build workflow
-        if: ${{ steps.commit-step.outputs.changes_committed == 'true' }}  # 使用显式ID + 正确拼写
+        if: ${{ steps.commit-step.outputs.changes_committed == 'true' }}
         uses: actions/github-script@v7
         with:
           script: |
@@ -149,7 +149,7 @@ jobs:
           echo "Skipping update:"
           echo "Current versions already match latest releases"
           echo "MI_VERSION=${{ steps.mihomo.outputs.result }}"
-          echo "MetaCubeX_VERSION=${{ steps.metacubexd.outputs.result }}"
+          echo "METACUBEXD_VERSION=${{ steps.metacubexd.outputs.result }}"
 
       - name: Skip update if no valid versions
         if: ${{ steps.mihomo.outputs.result == '' || steps.metacubexd.outputs.result == '' }}
