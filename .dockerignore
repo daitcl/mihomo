@@ -1,0 +1,40 @@
+# 构建产物
+dist/
+build/
+node_modules/
+*.log
+
+# 版本控制
+.git/
+.gitignore
+.github/
+
+# 文档和配置文件
+README.md
+*.md
+*.txt
+*.yml
+*.yaml
+*.toml
+
+# 环境文件
+.env
+.env.local
+.env.production
+
+# 开发工具配置
+.vscode/
+.idea/
+.DS_Store
+.dockerignore
+
+# 测试文件
+test/
+tests/
+*.test.js
+*.spec.js
+
+# 临时文件
+tmp/
+temp/
+*.tmp
