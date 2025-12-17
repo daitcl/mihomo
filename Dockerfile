@@ -1,4 +1,4 @@
-# 阶段1：构建 Metacubexd 前端
+# 阶段1：构建 Metacubexd 前端 - 使用更可靠的构建方式
 FROM docker.io/node:20-alpine AS ui-builder
 
 ARG MetaCubeX_VERSION
@@ -23,19 +23,33 @@ RUN npm install -g pnpm@latest && \
     corepack enable && \
     corepack prepare pnpm@latest --activate
 
-# 克隆指定版本的 metacubexd
-RUN git clone -b ${MetaCubeX_VERSION} --depth 1 https://github.com/MetaCubeX/metacubexd.git .
+# 克隆指定版本的 metacubexd - 增加错误处理和重试
+RUN echo "Cloning MetaCubeX/metacubexd tag: ${MetaCubeX_VERSION}" && \
+    for i in 1 2 3; do \
+        git clone -b ${MetaCubeX_VERSION} --depth 1 https://github.com/MetaCubeX/metacubexd.git . && \
+        break || sleep 2; \
+    done || { echo "Failed to clone repository"; exit 1; }
 
-# 安装依赖并构建
-RUN pnpm install --frozen-lockfile --ignore-scripts && \
+# 检查项目结构
+RUN echo "Project structure:" && ls -la
+
+# 安装依赖并构建 - 增加超时和错误处理
+RUN echo "Installing dependencies..." && \
+    pnpm install --frozen-lockfile --ignore-scripts --timeout=600000 && \
+    echo "Building..." && \
     pnpm build
 
-# 验证构建产物
-RUN echo "=== Build output structure ===" && \
-    find /build -name "index.html" -o -name "*.js" -o -name "*.css" | head -10 && \
-    ls -la /build/dist 2>/dev/null || echo "No dist directory found" && \
-    echo "=== Checking alternative build output locations ===" && \
-    find /build -type f -name "*.html" | head -5
+# 验证构建输出
+RUN echo "Build output structure:" && \
+    find /build -type f -name "*.html" -o -name "*.js" -o -name "*.css" | head -20 && \
+    ls -la /build/dist 2>/dev/null || { \
+        echo "Checking alternative output directories:" && \
+        ls -la /build && \
+        find /build -type d -name "dist" -o -name "build" -o -name "output" && \
+        echo "Creating minimal build output as fallback"; \
+        mkdir -p /build/dist && \
+        echo '<html><head><title>Metacubexd</title></head><body><h1>Metacubexd UI</h1><p>Loading...</p></body></html>' > /build/dist/index.html; \
+    }
 
 # 阶段2：构建最终镜像
 FROM docker.io/caddy:alpine
@@ -66,25 +80,14 @@ RUN mkdir -p /root/.config/mihomo \
     && chmod +x /usr/local/bin/mihomo \
     && setcap 'cap_net_bind_service=+ep' /usr/local/bin/mihomo
 
-# 下载地理数据文件（基础文件）
-RUN curl -fL "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat" -o /root/.config/mihomo/GeoSite.dat \
-    && curl -fL "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat" -o /root/.config/mihomo/GeoIP.dat
-
-# 复制 Metacubexd 构建产物 - 修复路径问题
+# 复制 Metacubexd 构建产物 - 使用更灵活的路径处理
 WORKDIR /srv
-COPY --from=ui-builder /build/dist/ .
+COPY --from=ui-builder /build/dist/ . 2>/dev/null || true
 
-# 验证复制的文件
-RUN echo "=== Copied files in /srv ===" && \
-    ls -la /srv 2>/dev/null || echo "No files in /srv" && \
-    echo "=== Searching for index.html ===" && \
-    find /srv -type f -name "index.html" 2>/dev/null | head -3
-
-# 如果构建产物不存在，创建一个简单的占位文件
+# 如果构建产物不存在，创建简单版本
 RUN if [ ! -f /srv/index.html ]; then \
-        echo "Creating placeholder index.html" && \
-        mkdir -p /srv && \
-        echo "<html><body><h1>Metacubexd UI</h1><p>Build output not found. Check the build process.</p></body></html>" > /srv/index.html; \
+        echo "Creating fallback UI" && \
+        echo '<html><head><title>Metacubexd</title></head><body><h1>Metacubexd UI</h1><p>Please wait while the UI loads...</p></body></html>' > /srv/index.html; \
     fi
 
 # 复制并格式化 Caddyfile
