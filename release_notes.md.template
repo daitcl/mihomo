@@ -20,7 +20,7 @@ mihomo 是一个基于 Clash 核心的代理工具镜像，集成了 Metacubexd 
 
 **构建信息**
 - mihomo 核心版本: `{{MI_VERSION}}`
-- Metacubexd 面板版本: `{{MetaCubeX_VERSION}}`
+- Metacubexd 面板版本: `{{METACUBEXD_VERSION}}`
 
 ### 拉取镜像
 ```bash
