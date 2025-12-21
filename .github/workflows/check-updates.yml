@@ -11,54 +11,47 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 获取脚本文件
+          fetch-depth: 1
 
       - name: Get valid Mihomo version
         id: mihomo
         uses: actions/github-script@v7
         with:
           script: |
-            const response = await github.rest.repos.listTags({
-              owner: 'MetaCubeX',
-              repo: 'mihomo',
-              per_page: 50
-            });
+            // 引入检查版本的脚本
+            const checkVersion = require('./.github/workflows/scripts/check-version.js');
             
-            // 筛选符合 vX.XX.XX 格式的 tags (更精确匹配)
-            const validTags = response.data
-              .map(tag => tag.name)
-              .filter(tag => /^v[1-9]\d*\.\d+\.\d+$/.test(tag));
+            // 获取 mihomo 最新版本
+            const mihomoVersion = await checkVersion.getLatestValidVersion(
+              'MetaCubeX',
+              'mihomo',
+              github,
+              context
+            );
             
-            if (validTags.length === 0) {
-              console.log('No valid tags found for mihomo');
-              return '';
-            }
-            
-            // 返回最新有效的 tag
-            return validTags[0];
+            console.log(`Mihomo 最新版本: ${mihomoVersion}`);
+            return mihomoVersion;
 
       - name: Get valid MetaCubeXD version
         id: metacubexd
         uses: actions/github-script@v7
         with:
           script: |
-            const response = await github.rest.repos.listTags({
-              owner: 'MetaCubeX',
-              repo: 'metacubexd',
-              per_page: 50
-            });
+            // 引入检查版本的脚本
+            const checkVersion = require('./.github/workflows/scripts/check-version.js');
             
-            // 筛选符合 vX.XX.XX 格式的 tags (更精确匹配)
-            const validTags = response.data
-              .map(tag => tag.name)
-              .filter(tag => /^v[1-9]\d*\.\d+\.\d+$/.test(tag));
+            // 获取 metacubexd 最新版本
+            const metacubexdVersion = await checkVersion.getLatestValidVersion(
+              'MetaCubeX',
+              'metacubexd',
+              github,
+              context
+            );
             
-            if (validTags.length === 0) {
-              console.log('No valid tags found for metacubexd');
-              return '';
-            }
-            
-            // 返回最新有效的 tag
-            return validTags[0];
+            console.log(`MetaCubeXD 最新版本: ${metacubexdVersion}`);
+            return metacubexdVersion;
 
       - name: Check current .env versions
         id: check_versions
@@ -72,28 +65,86 @@ jobs:
           echo "METACUBEXD_VERSION=$CURRENT_META"
           
           echo "Latest versions from GitHub:"
-          echo "MI_VERSION=${{ steps.mihomo.outputs.result }}"
-          echo "METACUBEXD_VERSION=${{ steps.metacubexd.outputs.result }}"
+          MI_LATEST="${{ steps.mihomo.outputs.result }}"
+          META_LATEST="${{ steps.metacubexd.outputs.result }}"
+          echo "MI_VERSION=$MI_LATEST"
+          echo "METACUBEXD_VERSION=$META_LATEST"
+          
+          # 判断每个版本是否需要更新
+          MI_CHANGED=false
+          META_CHANGED=false
+          NEEDS_UPDATE=false
+          
+          if [ -n "$MI_LATEST" ] && [ "$CURRENT_MI" != "$MI_LATEST" ]; then
+            MI_CHANGED=true
+            NEEDS_UPDATE=true
+            echo "Mihomo version changed: $CURRENT_MI -> $MI_LATEST"
+          fi
+          
+          if [ -n "$META_LATEST" ] && [ "$CURRENT_META" != "$META_LATEST" ]; then
+            META_CHANGED=true
+            NEEDS_UPDATE=true
+            echo "MetaCubeXD version changed: $CURRENT_META -> $META_LATEST"
+          fi
           
           # 设置输出变量
-          if [ "$CURRENT_MI" = "${{ steps.mihomo.outputs.result }}" ] && \
-             [ "$CURRENT_META" = "${{ steps.metacubexd.outputs.result }}" ]; then
-            echo "needs_update=false" >> $GITHUB_OUTPUT
+          echo "mi_changed=$MI_CHANGED" >> $GITHUB_OUTPUT
+          echo "meta_changed=$META_CHANGED" >> $GITHUB_OUTPUT
+          echo "needs_update=$NEEDS_UPDATE" >> $GITHUB_OUTPUT
+          
+          if [ "$NEEDS_UPDATE" = "false" ]; then
             echo "Versions unchanged. No update needed."
-          else
-            echo "needs_update=true" >> $GITHUB_OUTPUT
-            echo "New versions detected. Update required."
           fi
 
       - name: Update .env file
         if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' }}
         run: |
           echo "Updating .env with new versions:"
-          echo "MI_VERSION=${{ steps.mihomo.outputs.result }}" > .env
-          echo "METACUBEXD_VERSION=${{ steps.metacubexd.outputs.result }}" >> .env
+          # 使用 sed 更新，避免覆盖其他内容
+          if [ "${{ steps.check_versions.outputs.mi_changed }}" = "true" ]; then
+            if grep -q "^MI_VERSION=" .env; then
+              sed -i "s/^MI_VERSION=.*/MI_VERSION=${{ steps.mihomo.outputs.result }}/" .env
+            else
+              echo "MI_VERSION=${{ steps.mihomo.outputs.result }}" >> .env
+            fi
+          fi
+          
+          if [ "${{ steps.check_versions.outputs.meta_changed }}" = "true" ]; then
+            if grep -q "^METACUBEXD_VERSION=" .env; then
+              sed -i "s/^METACUBEXD_VERSION=.*/METACUBEXD_VERSION=${{ steps.metacubexd.outputs.result }}/" .env
+            else
+              echo "METACUBEXD_VERSION=${{ steps.metacubexd.outputs.result }}" >> .env
+            fi
+          fi
           
           # 显示更新后的内容
           cat .env
+
+      - name: Generate commit message
+        id: commit_msg
+        if: ${{ steps.mihomo.outputs.result != '' && steps.metacubexd.outputs.result != '' && steps.check_versions.outputs.needs_update == 'true' }}
+        run: |
+          MI_CHANGED="${{ steps.check_versions.outputs.mi_changed }}"
+          META_CHANGED="${{ steps.check_versions.outputs.meta_changed }}"
+          MI_VERSION="${{ steps.mihomo.outputs.result }}"
+          META_VERSION="${{ steps.metacubexd.outputs.result }}"
+          
+          if [ "$MI_CHANGED" = "true" ] && [ "$META_CHANGED" = "true" ]; then
+            # 两个版本都变化
+            COMMIT_MSG="chore: 更新 mihomo内核 版本号至 $MI_VERSION Metacubexd面板 版本号至 $META_VERSION，update versions to mihomo $MI_VERSION and metacubexd $META_VERSION"
+          elif [ "$MI_CHANGED" = "true" ]; then
+            # 仅 MI_VERSION 变化
+            COMMIT_MSG="chore: 更新 mihomo内核 版本号至 $MI_VERSION，update versions to mihomo $MI_VERSION"
+          elif [ "$META_CHANGED" = "true" ]; then
+            # 仅 METACUBEXD_VERSION 变化
+            COMMIT_MSG="chore: 更新 Metacubexd面板 版本号至 $META_VERSION，update versions to metacubexd $META_VERSION"
+          else
+            # 理论上不会到这里，因为 needs_update 为 true 时才执行此步骤
+            COMMIT_MSG="chore: update versions"
+          fi
+          
+          echo "Generated commit message: $COMMIT_MSG"
+          echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
 
       - name: Commit and push changes
         id: commit-step
@@ -102,7 +153,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .env
-          git commit -m "chore: update versions to mihomo ${{ steps.mihomo.outputs.result }} and metacubexd ${{ steps.metacubexd.outputs.result }}"
+          git commit -m "${{ steps.commit_msg.outputs.commit_message }}"
           
           # 尝试推送，如果失败则重试（处理并发更新冲突）
           n=0
