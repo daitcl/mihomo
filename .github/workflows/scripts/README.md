@@ -59,6 +59,8 @@ return version;
 
 ### 5. **目录结构清晰**
 
+```text
+
 .github/
 ├── workflows/
 │ ├── check-updates.yml # 主工作流文件
@@ -66,6 +68,7 @@ return version;
 │ ├── check-version.js # 版本检查脚本
 │ └── README.md # 说明文档
 
+```
 
 要使用这个版本，需要：
 1. 创建 `.github/workflows/scripts/` 目录
