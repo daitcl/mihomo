@@ -89,9 +89,9 @@ networks:
 ### 🔗 来找我
 
 - **CSDN**：[daitcl的博客](https://blog.csdn.net/qq_39538318)
-- **GitHub**：[@daitcl](https://github.com/daitcl) — 个人代码仓库（**gitee/gitcode**同名同步）
-- **爱发电**：[爱发电主页](https://ifdian.net/a/daitcc) — 欢迎支持、分享或合作
-- **个人网站**：[daitcc.top](https://www.daitcc.top) — （**你正在这里**）
+- **GitHub**：[@daitcl](https://github.com/daitcl)
+- **爱发电**：[爱发电主页](https://ifdian.net/a/daitcc) 
+- **个人网站**：[daitcc.top](https://www.daitcc.top) 
 - **邮箱**：daitcctop@163.com — 欢迎交流、指正或闲聊
 - **微信公众号**：扫一扫下方二维码，获取更新推送  
   <img src="./img/wechat_qrcode.jpg" alt="微信公众号二维码" width="150" />
