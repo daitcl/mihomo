@@ -86,13 +86,27 @@ networks:
 > 协议：[MIT](License)
 > 
 
-###  微信公众号
-![微信公众号](./img/gzh.jpg)
+### 🔗 来找我
 
----
+- **CSDN**：[daitcl的博客](https://blog.csdn.net/qq_39538318)
+- **GitHub**：[@daitcl](https://github.com/daitcl) — 个人代码仓库（**gitee/gitcode**同名同步）
+- **爱发电**：[爱发电主页](https://ifdian.net/a/daitcc) — 欢迎支持、分享或合作
+- **个人网站**：[daitcc.top](https://www.daitcc.top) — （**你正在这里**）
+- **邮箱**：daitcctop@163.com — 欢迎交流、指正或闲聊
+- **微信公众号**：扫一扫下方二维码，获取更新推送  
+  <img src="./img/wechat_qrcode.jpg" alt="微信公众号二维码" width="150" />
 
-### 赞赏
+### ☕ 支持与鼓励
 
-请我一杯咖啡吧！
+如果代码/容器对你有所启发，或者单纯想请我喝杯咖啡，  
+可以通过下方的 **爱发电** 或者 **支付宝/微信赞赏码** 来支持我创作。  
+每一份鼓励都是我持续创作的动力。
 
-![赞赏码](./img/skm.jpg)
+- **爱发电**：[赞助作者](https://ifdian.net/a/daitcc) — 点击链接即可支持  
+  <img src="./img/ifdian.png" alt="爱发电" width="150" />
+  
+- **支付宝赞赏**：扫一扫下方二维码  
+  <img src="./img/alipay.png" alt="支付宝收款码" width="150" />      
+
+- **微信赞赏**：扫一扫下方二维码  
+  <img src="./img/wechatpay.png" alt="微信赞赏码" width="150" />
