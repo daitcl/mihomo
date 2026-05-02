@@ -24,6 +24,8 @@ mihomo 是一个基于 Clash 核心的代理工具镜像，集成了 Metacubexd 
 docker pull daitcl/mihomo:latest
 # GitHub Container Registry
 docker pull ghcr.io/daitcl/mihomo:latest
+# 创建容器网络
+docker network create clash-net
 # 启动容器
 docker run -d \
   --name mihomo \
