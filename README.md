@@ -25,7 +25,29 @@ docker pull daitcl/mihomo:latest
 # GitHub Container Registry
 docker pull ghcr.io/daitcl/mihomo:latest
 # 启动容器
-docker run -d --name mihomo -p 7890:7890 -p 8080:8080 daitcl/mihomo:latest
+docker run -d \
+  --name mihomo \
+  --restart always \
+  --network clash-net \
+  -p 7890:7890 \
+  -p 7891:7891 \
+  -p 7892:7892 \
+  -p 7893:7893 \
+  -p 7894:7894 \
+  -p 9090:9090 \
+  -p 8080:8080 \
+  -e TZ=Asia/Shanghai \
+  -e LOG_LEVEL=silent \
+  -e CLASH_SECRET="" \
+  -e SUBSCRIBE_URL="your_subscribe_url" \
+  -e SUBSCRIBE_NAME="your_subscribe_name" \
+  -v "$(pwd)/clash-config:/root/.config/mihomo" \
+  -v "$(pwd)/metacubexd-config:/config/caddy" \
+  --health-cmd "curl -f http://localhost:9090" \
+  --health-interval 30s \
+  --health-timeout 10s \
+  --health-retries 3 \
+  daitcl/mihomo:latest
 ```
 
 ### docker-compose.yml配置文件
