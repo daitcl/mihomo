@@ -69,6 +69,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+          # 添加 OCI Annotations，让版本信息出现在 Manifest 顶层
+          annotations: |
+            org.opencontainers.image.version=${{ env.MI_VERSION }}
+            com.daitcl.mihomo.version=${{ env.MI_VERSION }}
+            com.daitcl.metacubexd.version=${{ env.METACUBEXD_VERSION }}
 
       - name: Generate release notes
         run: |

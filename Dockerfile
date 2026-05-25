@@ -39,6 +39,13 @@ ENV CLASH_SECRET=""
 ENV SUBSCRIBE_NAME="default"
 ENV SUBSCRIBE_URL=""
 
+# 将版本信息固化为镜像标签（Config Labels）
+LABEL org.opencontainers.image.title="mihomo" \
+      org.opencontainers.image.version="${MI_VERSION}" \
+      org.opencontainers.image.description="Mihomo with Metacubexd dashboard, powered by Caddy" \
+      com.daitcl.mihomo.version="${MI_VERSION}" \
+      com.daitcl.metacubexd.version="${METACUBEXD_VERSION}"
+
 # 安装运行依赖
 RUN apk update && apk add --no-cache libcap curl bash gettext coreutils tzdata \
     && rm -rf /var/cache/apk/*
