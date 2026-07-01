@@ -26,6 +26,25 @@ RUN echo "安装依赖..." \
     && pnpm generate \
     && echo "构建完成。"
 
+# ===== 🧩 新增：动态定位输出目录并统一到 /build/final =====
+RUN echo "正在探测前端构建产物目录..." \
+    && OUTPUT_DIR="" \
+    && for candidate in ".output/public" "dist" "build" ".output" "public"; do \
+         if [ -d "/build/$candidate" ] && [ -f "/build/$candidate/index.html" ]; then \
+           OUTPUT_DIR="/build/$candidate"; \
+           echo "✅ 找到输出目录: $OUTPUT_DIR"; \
+           break; \
+         fi \
+       done \
+    && if [ -z "$OUTPUT_DIR" ]; then \
+         echo "❌ 未找到有效输出目录（包含 index.html）！"; \
+         echo "当前 /build 目录结构如下：" && ls -la /build/; \
+         exit 1; \
+       fi \
+    && mkdir -p /build/final \
+    && cp -r "$OUTPUT_DIR"/* /build/final/ \
+    && echo "已将所有静态文件复制到 /build/final"
+
 # ========== 第二阶段：构建最终应用镜像 ==========
 FROM caddy:alpine
 
@@ -57,9 +76,9 @@ RUN mkdir -p /root/.config/mihomo \
     && chmod +x /usr/local/bin/mihomo \
     && setcap 'cap_net_bind_service=+ep' /usr/local/bin/mihomo
 
-# 复制前端构建产物
+# ✅ 修改：从固定路径 /build/final/ 复制前端产物
 WORKDIR /srv
-COPY --from=frontend-builder /build/dist ./
+COPY --from=frontend-builder /build/final/ ./
 
 # 复制应用配置文件
 COPY Caddyfile .
