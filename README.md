@@ -18,14 +18,60 @@
 
 mihomo 是一个基于 Clash 核心的代理工具镜像，集成了 Metacubexd 管理面板，提供强大的代理功能和直观的 Web 管理界面。
 
-### 拉取镜像
+---
+
+## 🚀 快速上手（30 秒）
+
+1. **准备订阅链接**：从机场/订阅服务商获取订阅 URL（形如 `https://example.com/sub?token=xxx`）。免费订阅可网上自行搜索。
+2. **创建网络并运行容器**：
+
+```bash
+docker network create clash-net
+docker run -d --name mihomo --restart always --network clash-net \
+  -p 7890:7890 -p 7891:7891 -p 7892:7892 -p 7893:7893 -p 7894:7894 \
+  -p 9090:9090 -p 8080:8080 \
+  -e SUBSCRIBE_URL="你的订阅链接" \
+  -e TZ=Asia/Shanghai \
+  daitcl/mihomo:latest
+```
+
+3. **访问面板**：浏览器打开 `http://<服务器IP>:8080`，登录后即可切换节点、查看流量。
+
+> 提示：你将 v 换成上一步拿到的实际版本号，避免使用 `latest` 时可固定版本，例如 `docker pull daitcl/mihomo:v1.19.25`。
+
+---
+
+## 🔌 环境变量说明
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `SUBSCRIBE_URL` | （必填） | 订阅链接，格式 `https://...`，容器会用它生成 `proxy-providers` 配置 |
+| `SUBSCRIBE_NAME` | `default` | 订阅在配置中的名称，建议使用英文字母/数字（不能有空格或特殊字符） |
+| `CLASH_SECRET` | 空 | 外部控制器（9090 端口）的访问密钥；**设置后访问面板也需要输入** |
+| `LOG_LEVEL` | `info` | mihomo 日志级别，可设为 `silent` 关闭大部分日志 |
+| `TZ`（非脚本） | `Asia/Shanghai` | 时区，供容器内 `tzdata` 使用 |
+
+---
+
+## 🐳 拉取镜像
+
 ```bash
 # Docker Hub
 docker pull daitcl/mihomo:latest
 # GitHub Container Registry
 docker pull ghcr.io/daitcl/mihomo:latest
+```
+
+> 建议固定版本（如 `docker pull daitcl/mihomo:vX.Y.Z`）以保证行为可预期，`latest` 跟随最新构建。
+
+---
+
+## 📦 单容器运行方式（详细）
+
+```bash
 # 创建容器网络
 docker network create clash-net
+
 # 启动容器
 docker run -d \
   --name mihomo \
@@ -52,7 +98,38 @@ docker run -d \
   daitcl/mihomo:latest
 ```
 
-### docker-compose.yml配置文件
+**参数说明：**
+
+- `-p 7890:7890` — HTTP 代理端口
+- `-p 7891:7891` — SOCKS5 代理端口
+- `-p 7892:7892` — 混合端口（HTTP+SOCKS5）
+- `-p 7893:7893` — REDIR 端口
+- `-p 7894:7894` — TPROXY 端口
+- `-p 9090:9090` — Clash 外部控制 API
+- `-p 8080:8080` — Metacubexd Web UI
+- `-v $(pwd)/clash-config:/root/.config/mihomo` — **持久化** mihomo 配置/订阅（首次为空目录时自动生成 config.yaml）
+- `-v $(pwd)/metacubexd-config:/config/caddy` — **持久化**面板数据（Caddy 数据目录）
+
+---
+
+## 🧩 docker-compose.yml 使用方式
+
+### 方式一：直接用仓库自带的 compose 文件
+
+```bash
+# 克隆并进入目录
+git clone https://github.com/daitcl/mihomo.git
+cd mihomo
+
+# 修改 docker-compose.yml 中的 SUBSCRIBE_URL
+# （或复制一份另用）
+sed -i 's|your_subscribe_url|你的订阅链接|' docker-compose.yml
+
+# 启动
+docker-compose up -d
+```
+
+### 方式二：创建你自己的 compose 文件
 
 ```yaml
 version: '3.8'
@@ -66,7 +143,7 @@ services:
       # 核心配置
       - TZ=Asia/Shanghai
       - LOG_LEVEL=silent
-      - CLASH_SECRET=  
+      - CLASH_SECRET=
       - SUBSCRIBE_URL=your_subscribe_url
       - SUBSCRIBE_NAME=your_subscribe_name
     ports:
@@ -99,6 +176,25 @@ networks:
   clash-net:
     driver: bridge
 ```
+
+> 若容器网络 `clash-net` 不存在，`docker-compose up -d` 会自动创建（compose 会管理声明的网络）。单独使用 `docker network create` 仅用于 `docker run` 场景。
+
+---
+
+## 🛠 使用技巧
+
+- **切换订阅**：更新容器挂载目录内的 `config.yaml`，或修改 `SUBSCRIBE_URL` 后重建容器。
+- **修改自定义规则**：编辑挂载目录 `/root/.config/mihomo` 下的 `config.yaml`（首次由模板生成的）。注意：模板只在配置不存在时生效。
+- **重启生效**：配置文件改动后 `docker restart mihomo`。
+
+## ⚠️ 常见问题
+
+- **面板打不开**：检查 `8080` 端口是否映射，`docker logs mihomo` 查看 Caddy 日志。
+- **订阅配置无效**：确认 `SUBSCRIBE_URL` 格式（以 `https://` 开头），若订阅含特殊字符请 URL 编码。
+- **节点不显示**：节点来自订阅，URL 错误或墙外时 `proxy-providers` 拉取会失败，查看 mihomo 日志确认。
+- **TUN 模式**：启用 TUN 后，宿主机需 `NET_ADMIN` 权限并挂载 `/dev/net/tun` 设备，取消 compose 中注释即可。
+
+---
 
 >
 > 仓库地址：https://github.com/daitcl/mihomo
