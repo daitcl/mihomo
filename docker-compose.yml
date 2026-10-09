@@ -21,7 +21,9 @@ services:
       - "9090:9090"  # Clash控制API
       - "8080:8080"  # Metacubexd Web UI
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090"]
+      # 探测 mihomo 控制器 /version 端点并携带 CLASH_SECRET 鉴权，
+      # 避免设置 secret 后健康检查因 401 一直失败
+      test: ["CMD-SHELL", "curl -sf -H \"Authorization: Bearer $CLASH_SECRET\" http://localhost:9090/version"]
       interval: 30s
       timeout: 10s
       retries: 3

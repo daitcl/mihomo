@@ -12,8 +12,10 @@ external-controller: '0.0.0.0:9090'
 secret: '${CLASH_SECRET}'
 
 # 网络增强
+# TUN 模式默认关闭，避免无 NET_ADMIN 权限时启动失败；
+# 需要时在 docker-compose.yml 中取消 cap_add/devices 注释并将 enable 改为 true
 tun:
-  enable: true
+  enable: false
   stack: mixed
   dns-hijack:
     - "any:53"
