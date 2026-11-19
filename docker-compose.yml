@@ -9,7 +9,7 @@ services:
       # 核心配置
       - TZ=Asia/Shanghai
       - LOG_LEVEL=silent
-      - CLASH_SECRET=  
+      - CLASH_SECRET= your_clash_secret
       - SUBSCRIBE_URL=your_subscribe_url
       - SUBSCRIBE_NAME=your_subscribe_name
     ports:

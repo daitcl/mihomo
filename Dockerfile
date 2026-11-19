@@ -96,13 +96,10 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh \
     && caddy fmt --overwrite /srv/Caddyfile
 
-# 为 caddy 用户授予必要目录权限（caddy:alpine 内置 caddy 用户，
-# 站点文件读取与 /data、/config 写入需要非 root 可访问）
-# 显式创建 caddy 用户/组，再设置目录权限
-RUN addgroup -S caddy \
-    && adduser -S -D -H -h /var/lib/caddy -s /sbin/nologin -G caddy caddy \
-    && mkdir -p /data /config /var/lib/caddy \
-    && chown -R caddy:caddy /data /config /var/lib/caddy /srv
+# 创建运行时目录。Caddy 保持以 root 运行（与官方镜像默认行为一致），
+# 以兼容 docker-compose 中宿主机 bind mount 的属主设置
+# （bind mount 会覆盖镜像内属主，root 运行可避免权限问题）
+RUN mkdir -p /data /config
 
 EXPOSE 7890 7891 7892 7893 7894 9090 8080
 
